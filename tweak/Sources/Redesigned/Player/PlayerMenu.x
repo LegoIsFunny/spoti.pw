@@ -877,7 +877,7 @@ static UIMenu *menuFor(SGRPlayerMenuTakeover *t) {
         [tiles removeLastObject];
     }
     if (!rows.count) {
-        UIAction *loading = [UIAction actionWithTitle:@"Loading..." image:nil identifier:nil handler:nil];
+        UIAction *loading = [UIAction actionWithTitle:@"Loading..." image:nil identifier:nil handler:^(UIAction *action) {}];
         loading.attributes = UIMenuElementAttributesDisabled;
         [main addObject:loading];
     }

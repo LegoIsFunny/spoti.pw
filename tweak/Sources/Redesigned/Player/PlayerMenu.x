@@ -1191,6 +1191,7 @@ static UIViewController *contextMenuControllerFor(UIView *view) {
 %end
 
 %ctor {
+    return; // disabled: 0.23.0 takeover reverted, see PlayerHeader.x
     if (!SGRedesignedUI()) return;
     sgr_menuOn = YES;
     sgr_inputShields = [NSHashTable weakObjectsHashTable];

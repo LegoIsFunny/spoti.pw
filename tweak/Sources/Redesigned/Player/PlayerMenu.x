@@ -1120,6 +1120,7 @@ static UIViewController *contextMenuControllerFor(UIView *view) {
 
 - (void)presentationTransitionWillBegin {
     %orig;
+    return;
     UIPresentationController *presentation = (UIPresentationController *)self;
     UIViewController *sheet = presentation.presentedViewController;
     UIViewController *menu = contextMenuIn(sheet, 0);

@@ -5,7 +5,6 @@
 UIColor *SGGrey(void);
 UIColor *SGGreen(void);
 UIColor *SGRed(void);
-UIColor *SGDiscordColor(void);
 UIColor *SGPageBackground(void);
 UIColor *SGCardBackground(void);
 UIFont *SGTitleFont(void);
@@ -37,7 +36,6 @@ UITableViewCell *SGDequeueCell(UITableView *table, NSString *identifier);
 void SGOpenURL(NSString *url);
 extern NSString *const SGSiteURL;
 extern NSString *const SGRepoURL;
-extern NSString *const SGDiscordURL;
 // The one Spotify build the mod is made for (AGENTS.md lists what else follows it on a bump).
 extern NSString *const SGSupportedSpotifyVersion;
 // The controller on top of the key window, through whatever is presented over it.

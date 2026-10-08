@@ -5,9 +5,9 @@
 
 static const size_t kSample = 64;      // the artwork shrunk to this square before its colours are read
 static const size_t kEdgeRows = 10;    // the bottom rows of it averaged into the edge colour
-// A field's OKLab lightness ceiling (0.30 with Increase Contrast), and its chroma lift and cap.
+// A field's OKLab lightness ceiling (0.30 with Increase Contrast), and its saturation lift and cap.
 static const CGFloat kFieldLightness = 0.34, kFieldLightnessContrast = 0.30;
-static const CGFloat kFieldChromaLift = 1.3, kFieldChroma = 0.14;
+static const CGFloat kFieldSaturationLift = 1.3, kFieldSaturation = 0.14;
 static const CGFloat kDissolveWidth = 96, kDissolveSigma = 5;
 static const CGFloat kFadeFrom = 0.55, kDissolveOpaque = 0.85;
 // A tint: the artwork's dominant colour brought down to this luminance, then this share of it mixed into
@@ -91,7 +91,7 @@ static BOOL fromOklab(CGFloat lightness, CGFloat a, CGFloat b, CGFloat linear[3]
 }
 
 // The colour's own hue, dark and a little more colourful, as the Music app draws a page: capping saturation
-// in HSV instead turned every warm hue brown. Past the chroma sRGB holds at that lightness, chroma gives way.
+// in HSV instead turned every warm hue brown. Past the saturation sRGB holds at that lightness, saturation gives way.
 static UIColor *fieldColorFor(UIColor *color, CGFloat ceiling) {
     CGFloat r = 0, g = 0, b = 0, a = 1;
     if (![color getRed:&r green:&g blue:&b alpha:&a]) {
@@ -102,9 +102,9 @@ static UIColor *fieldColorFor(UIColor *color, CGFloat ceiling) {
     CGFloat linear[3] = {toLinear(MIN(1, MAX(0, r))), toLinear(MIN(1, MAX(0, g))), toLinear(MIN(1, MAX(0, b)))}, lab[3];
     toOklab(linear, lab);
     CGFloat lightness = MIN(lab[0], ceiling), hue = atan2(lab[2], lab[1]);
-    CGFloat chroma = MIN(hypot(lab[1], lab[2]) * kFieldChromaLift, kFieldChroma);
-    while (!fromOklab(lightness, chroma * cos(hue), chroma * sin(hue), linear) && chroma > 0) {
-        chroma = MAX(0, chroma - 0.004);
+    CGFloat saturation = MIN(hypot(lab[1], lab[2]) * kFieldSaturationLift, kFieldSaturation);
+    while (!fromOklab(lightness, saturation * cos(hue), saturation * sin(hue), linear) && saturation > 0) {
+        saturation = MAX(0, saturation - 0.004);
     }
     return [UIColor colorWithRed:toEncoded(MIN(1, MAX(0, linear[0]))) green:toEncoded(MIN(1, MAX(0, linear[1])))
                             blue:toEncoded(MIN(1, MAX(0, linear[2]))) alpha:1];

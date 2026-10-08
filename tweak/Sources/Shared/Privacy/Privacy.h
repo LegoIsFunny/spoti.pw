@@ -9,6 +9,7 @@
 
 // The destinations it knows in the order it lists them, and how many requests to one of them it
 // has answered instead of letting out (nil label for all of them).
+extern NSNotificationName const SGBlockedCountsDidChangeNotification;
 NSArray<NSString *> *SGBlockedLabels(void);
 NSUInteger SGBlockedCount(NSString *label);
 void SGResetBlocked(void);

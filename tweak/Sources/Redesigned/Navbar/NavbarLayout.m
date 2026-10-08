@@ -19,6 +19,21 @@ static NSArray *listOfKind(NSString *key, Class kind) {
 }
 
 NSArray<NSDictionary *> *SGRNavbarLayout(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSArray<NSDictionary *> *layout = listOfKind(kNavbarLayout, NSDictionary.class);
+        __block NSMutableArray<NSDictionary *> *updated = nil;
+        [layout enumerateObjectsUsingBlock:^(NSDictionary *entry, NSUInteger index, BOOL *stop) {
+            id uri = entry[SGRNavbarURI], icon = entry[SGRNavbarIcon];
+            if (![uri isKindOfClass:NSString.class] || ![uri isEqualToString:@"spotify:collection:tracks"]
+                || ![icon isKindOfClass:NSString.class] || ![icon isEqualToString:@"heart"]) return;
+            if (!updated) updated = [layout mutableCopy];
+            NSMutableDictionary *corrected = [entry mutableCopy];
+            corrected[SGRNavbarIcon] = @"sf:heart.fill";
+            updated[index] = corrected;
+        }];
+        if (updated) [NSUserDefaults.standardUserDefaults setObject:updated forKey:kNavbarLayout];
+    });
     return listOfKind(kNavbarLayout, NSDictionary.class);
 }
 

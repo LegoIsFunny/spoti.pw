@@ -46,9 +46,7 @@ static UIViewController *modSettingsPage(void) {
     SGModRow *signing = SGSigningWarningRow();
     if (signing) [warnings addObject:signing];
     if (warnings.count) [sections addObject:SGSection(nil, warnings)];
-    SGModRow *discord = SGWithSymbol(SGLinkRow(@"Join the Discord", @"Release pings, help and previews", SGDiscordURL), @"bubble.left.and.bubble.right.fill");
-    discord.color = SGDiscordColor();
-    NSMutableArray<SGModRow *> *support = [NSMutableArray arrayWithObjects:SGDonateRow(), discord, nil];
+    NSMutableArray<SGModRow *> *support = [NSMutableArray arrayWithObject:SGDonateRow()];
     SGModRow *certificate = SGCertificateRow();
     if (certificate) [support addObject:certificate];
     [sections addObject:SGSection(nil, support)];
@@ -91,7 +89,7 @@ static UIViewController *modSettingsPage(void) {
             mod,
         ]),
     ]];
-    return [[SGModPage alloc] initWithTitle:@"spoti.pw" intro:nil sections:sections footer:nil];
+    return [[SGModPage alloc] initWithTitle:@"Auralis" intro:nil sections:sections footer:nil];
 }
 
 #pragma mark - row in the settings list and the side drawer

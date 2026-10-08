@@ -20,16 +20,16 @@
 #import "Player.h"
 
 // A sheet this soon after the ⋯'s tap is the player's.
-static const NSTimeInterval kMenuAfterTap = 3;
+static const NSTimeInterval kMenuAfterTap = 1.0;
 // A row picked before Spotify's rows are in and still not fired by then, and Spotify's own sheet is shown
 // instead, with whatever it is showing; rows in the table that still cannot be read by then, likewise.
-static const NSTimeInterval kRowsWait = 4;
+static const NSTimeInterval kRowsWait = 1.2;
 // A sheet hidden as its presentation begins and still without a menu taken over by then is shown again.
-static const NSTimeInterval kClaimWait = 1;
+static const NSTimeInterval kClaimWait = 0.35;
 // How often the table is looked at while the menu waits for Spotify's rows.
-static const NSTimeInterval kRowsPoll = 0.05;
+static const NSTimeInterval kRowsPoll = 0.02;
 // A menu the system has not shown by then is given up for Spotify's sheet.
-static const NSTimeInterval kShowWait = 0.8;
+static const NSTimeInterval kShowWait = 0.35;
 // How long after the menu has closed a pick may still come in before the sheet is taken away.
 static const NSTimeInterval kPickGrace = 0.3;
 // How long Spotify has, after a row is fired, to take its sheet away or put something over it.

@@ -19,7 +19,7 @@ static const NSInteger kTries = 45;
 @implementation SGIncompatibility
 @end
 
-static NSString *const kReportLine = @"Please don't open issues or report bugs on Discord from this setup.";
+static NSString *const kReportLine = @"Please don't open issues or report bugs from this setup.";
 
 static NSString *runningVersion(void) {
     id version = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"];

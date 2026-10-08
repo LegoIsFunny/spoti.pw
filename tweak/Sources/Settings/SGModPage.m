@@ -560,8 +560,7 @@ static void showProgress(UITableViewCell *cell, SGModRow *row, BOOL animated) {
     NSArray<NSArray<SGModRow *> *> *_shown;   // each section's rows that show now (SGModRow.visible)
     UIView *_intro;
     UIView *_footer;
-    NSTimer *_ticker;
-    BOOL _live;
+    BOOL _refreshScheduled;
     NSSet<NSNotificationName> *_refreshOn;
 }
 
@@ -572,11 +571,9 @@ static void showProgress(UITableViewCell *cell, SGModRow *row, BOOL animated) {
     _shown = [self rowsToShow];
     _intro = intro ? SGNote(intro) : nil;
     _footer = footer ? SGNote(footer) : nil;
-    // A page row reads its value out when the page appears rather than on the ticker, so only the
-    // rows whose numbers climb on their own keep one running.
+    // A page row reads its value out when the page appears; changing values opt into notifications.
     NSMutableSet<NSNotificationName> *refreshOn = [NSMutableSet set];
     for (SGModSection *s in sections) for (SGModRow *row in s.rows) {
-        _live |= row.value && !row.page;
         if (row.refreshOn) [refreshOn addObject:row.refreshOn];
     }
     _refreshOn = refreshOn;
@@ -669,24 +666,31 @@ static void showProgress(UITableViewCell *cell, SGModRow *row, BOOL animated) {
     [self.tableView reloadData];
     for (NSNotificationName name in _refreshOn) {
         [NSNotificationCenter.defaultCenter removeObserver:self name:name object:nil];
-        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(readValues) name:name object:nil];
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(valuesChanged:) name:name object:nil];
     }
-    if (!_live) return;
-    // The counters climb while the page is open; the labels are written straight into the cells so
-    // that a reload never lands under a switch being dragged. A cancelled back swipe appears the
-    // page again without it ever disappearing, so the old timer goes first.
-    [_ticker invalidate];
-    _ticker = [NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(readValues) userInfo:nil repeats:YES];
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
     [super viewDidDisappear:animated];
-    [_ticker invalidate];
-    _ticker = nil;
     for (NSNotificationName name in _refreshOn) [NSNotificationCenter.defaultCenter removeObserver:self name:name object:nil];
 }
 
 // Rows that come and go on their own (a download finishing brings its Remove row) follow here too.
+- (void)valuesChanged:(NSNotification *)notification {
+    @synchronized (self) {
+        if (_refreshScheduled) return;
+        _refreshScheduled = YES;
+    }
+    __weak SGModPage *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        SGModPage *page = weakSelf;
+        if (!page) return;
+        @synchronized (page) { page->_refreshScheduled = NO; }
+        if (!page.isViewLoaded || !page.view.window) return;
+        [page readValues];
+    });
+}
+
 - (void)readValues {
     [self showRowsThen:nil];
     for (UITableViewCell *cell in self.tableView.visibleCells) {

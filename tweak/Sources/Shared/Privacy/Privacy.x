@@ -33,6 +33,7 @@ static const SGBlockRule kRules[] = {
 static const size_t kRuleCount = sizeof(kRules) / sizeof(kRules[0]);
 
 static NSString *const kCounts = @"spotifyglass.privacy.counts";
+NSNotificationName const SGBlockedCountsDidChangeNotification = @"spotifyglass.privacy.counts.didChange";
 static NSMutableDictionary<NSString *, NSNumber *> *sg_counts;
 
 @interface SGBlockProtocol : NSURLProtocol
@@ -58,6 +59,7 @@ static void countOne(NSString *label) {
         counts[label] = @(counts[label].unsignedIntegerValue + 1);
         [NSUserDefaults.standardUserDefaults setObject:counts forKey:kCounts];
     }
+    [NSNotificationCenter.defaultCenter postNotificationName:SGBlockedCountsDidChangeNotification object:nil];
 }
 
 static NSString *labelFor(NSURL *url) {
@@ -97,6 +99,7 @@ void SGResetBlocked(void) {
         sg_counts = [NSMutableDictionary dictionary];
         [NSUserDefaults.standardUserDefaults removeObjectForKey:kCounts];
     }
+    [NSNotificationCenter.defaultCenter postNotificationName:SGBlockedCountsDidChangeNotification object:nil];
 }
 
 @implementation SGBlockProtocol

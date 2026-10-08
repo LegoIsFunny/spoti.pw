@@ -25,13 +25,17 @@ static UIViewController *tipsPage(void) {
 static SGModSection *countersSection(void) {
     NSMutableArray<SGModRow *> *counts = [NSMutableArray array];
     for (NSString *label in SGBlockedLabels()) {
-        [counts addObject:SGStatRow(label, ^NSString *{
+        SGModRow *row = SGStatRow(label, ^NSString *{
             return @(SGBlockedCount(label)).stringValue;
-        })];
+        });
+        row.refreshOn = SGBlockedCountsDidChangeNotification;
+        [counts addObject:row];
     }
-    [counts addObject:SGStatRow(@"Total", ^NSString *{
+    SGModRow *total = SGStatRow(@"Total", ^NSString *{
         return @(SGBlockedCount(nil)).stringValue;
-    })];
+    });
+    total.refreshOn = SGBlockedCountsDidChangeNotification;
+    [counts addObject:total];
     [counts addObject:SGActionRow(@"Reset the telemetry counters", nil, ^{ SGResetBlocked(); })];
     return SGSection(@"Telemetry blocked so far", counts);
 }

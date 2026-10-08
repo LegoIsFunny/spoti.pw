@@ -3,7 +3,7 @@
 // bitmap to draw instead of a live blur.
 //
 // The field colour keeps its hue, with its OKLab lightness held to 0.34 (0.30 with Increase Contrast)
-// and its chroma lifted by 1.3 up to 0.14. On anything that dark white text is past 11:1 and SGRSecondary
+// and its saturation lifted by 1.3 up to 0.14. On anything that dark white text is past 11:1 and SGRSecondary
 // (white 65%) past 4.5:1, WCAG AA, whatever the hue.
 //
 // Threading: +paletteForImage: may be called from the main thread only and calls back on it. The work

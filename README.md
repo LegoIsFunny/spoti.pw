@@ -21,10 +21,9 @@
 </p>
 
 <p align="center">
-  <a href="https://spoti.pw">spoti.pw</a> ·
+  <a href="https://chroma.pw">chroma</a> ·
   <a href="#build-it">Build it</a> ·
   <a href="docs/tweaks.md">Hack on it</a> ·
-  <a href="https://ko-fi.com/darkksh">Support</a>
 </p>
 
 <p align="center">

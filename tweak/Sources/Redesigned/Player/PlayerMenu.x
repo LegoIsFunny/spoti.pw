@@ -1125,8 +1125,8 @@ static UIViewController *contextMenuControllerFor(UIView *view) {
     UIViewController *menu = contextMenuIn(sheet, 0);
     if (!moreTappedRecently() || !menu) return;
     objc_setAssociatedObject(sheet, &kClaimKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    hidePresentation(presentation.presentedView, presentation.containerView);
-    updateInputShield(sgr_moreButton);
+    // hidePresentation(presentation.presentedView, presentation.containerView);
+    // updateInputShield(sgr_moreButton);
     // A menu asked for from inside this call is never shown; from the next turn it is, and stays.
     __weak UIViewController *weakMenu = menu;
     dispatch_async(dispatch_get_main_queue(), ^{

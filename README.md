@@ -8,7 +8,7 @@
 
 <p align="center">Rework of the 0.23.0 beta branch fork from spoti.pw before chroma (0.50.0). Hoping to reduce issues and bugs.</p>
 
-<p align="center">Below remains the same.</p>
+<p align="center">Below remains (relatively) the same.</p>
 <h2 align="center">-</h2>
 <p align="center">Spotify, in glass.</p>
 
@@ -23,7 +23,7 @@
 <p align="center">
   <a href="https://chroma.pw">chroma</a> ·
   <a href="#build-it">Build it</a> ·
-  <a href="docs/tweaks.md">Hack on it</a> ·
+  <a href="docs/tweaks.md">Hack on it</a>
 </p>
 
 <p align="center">

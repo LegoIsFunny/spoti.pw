@@ -1,23 +1,9 @@
-// What the update check tells spoti.pw about this install, so installs can be counted: versions,
-// device, look, how the app is signed, and which big switches are on. Nothing of the account or of what is played.
-#import <dlfcn.h>
-#import <sys/utsname.h>
+// What the update check used to post to spoti.pw. The body and its payload were removed in the
+// Auralis fork; SGUsageBody returns nil, so nothing is sent anywhere.
 #import "Core/SGCore.h"
 #import "About.h"
-#import "Native/Appearance/Appearance.h"
-#import "Native/Player/NowPlaying.h"
-#import "Shared/ArtistBlock/ArtistBlock.h"
-#import "Shared/Gestures/Gestures.h"
-#import "Shared/Haptics/Haptics.h"
-#import "Shared/AudioEffects/AudioEffects.h"
-#import "Shared/LiveActivity/LiveActivity.h"
-#import "Shared/LockScreenLyrics/LockScreenLyrics.h"
-#import "Shared/LyricsSources/LyricsSources.h"
-#import "Shared/Privacy/Privacy.h"
 
-// Outside "spotifyglass." on purpose: Reset all settings must not mint a second install, and a
-// settings backup restored on another phone must not carry this one's id along.
-static NSString *const kInstall = @"spotipw.install";
+// Still used to mark the day a check was made, so repeated launches don't re-check.
 static NSString *const kAsked = @"spotipw.asked";
 
 // Not SGEnabled: after a reset that reads every unset switch as off, and this is not one of them.
@@ -43,33 +29,10 @@ BOOL SGUsageOwed(void) {
     return usageOn() && ![[NSUserDefaults.standardUserDefaults stringForKey:kAsked] isEqualToString:today()];
 }
 
-// Marked when asked, not when answered: a day spoti.pw is down costs that day's count, not a request
-// on every launch.
+// Marked when asked, not when answered: a day the server is down costs that day's count, not a
+// request on every launch.
 void SGUsageNoteAsked(void) {
     [NSUserDefaults.standardUserDefaults setObject:today() forKey:kAsked];
-}
-
-static NSString *installID(void) {
-    NSUserDefaults *store = NSUserDefaults.standardUserDefaults;
-    NSString *stored = [store stringForKey:kInstall];
-    if ([[NSUUID alloc] initWithUUIDString:stored ?: @""]) return stored;
-    NSString *made = NSUUID.UUID.UUIDString.lowercaseString;
-    [store setObject:made forKey:kInstall];
-    return made;
-}
-
-static NSString *device(void) {
-    struct utsname name;
-    return uname(&name) == 0 ? @(name.machine) : nil;
-}
-
-// A dylib inside the app's bundle was put into the IPA; one outside it was injected by a jailbreak.
-static NSString *installKind(void) {
-    NSString *bundle = NSBundle.mainBundle.bundlePath;
-    Dl_info info;
-    if (dladdr(&installKind, &info) && info.dli_fname && ![@(info.dli_fname) hasPrefix:bundle]) return @"jailbreak";
-    NSString *marker = [bundle.stringByDeletingLastPathComponent stringByAppendingPathComponent:@"_TrollStore"];
-    return [NSFileManager.defaultManager fileExistsAtPath:marker] ? @"trollstore" : @"sideload";
 }
 
 NSData *SGUsageBody(void) {

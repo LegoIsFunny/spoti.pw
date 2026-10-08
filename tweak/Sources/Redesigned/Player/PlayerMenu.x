@@ -16,24 +16,26 @@
 #import <objc/runtime.h>
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
+#import "Shared/Player/PlayerState.h"
 #import "Shared/Player/SpeedPitch.h"
 #import "Player.h"
 
 // A sheet this soon after the ⋯'s tap is the player's.
-static const NSTimeInterval kMenuAfterTap = 1.0;
+static const NSTimeInterval kMenuAfterTap = 3;
 // A row picked before Spotify's rows are in and still not fired by then, and Spotify's own sheet is shown
 // instead, with whatever it is showing; rows in the table that still cannot be read by then, likewise.
-static const NSTimeInterval kRowsWait = 1.2;
+static const NSTimeInterval kRowsWait = 4;
 // A sheet hidden as its presentation begins and still without a menu taken over by then is shown again.
-static const NSTimeInterval kClaimWait = 0.35;
-// How often the table is looked at while the menu waits for Spotify's rows.
-static const NSTimeInterval kRowsPoll = 0.02;
+static const NSTimeInterval kClaimWait = 1;
+// How often Spotify's rows are retried while a provisional menu pick awaits validation.
+static const NSTimeInterval kRowsPoll = 0.05;
 // A menu the system has not shown by then is given up for Spotify's sheet.
-static const NSTimeInterval kShowWait = 0.35;
+static const NSTimeInterval kShowWait = 0.8;
 // How long after the menu has closed a pick may still come in before the sheet is taken away.
 static const NSTimeInterval kPickGrace = 0.3;
 // How long Spotify has, after a row is fired, to take its sheet away or put something over it.
 static const NSTimeInterval kSettle = 0.8;
+static const NSTimeInterval kInputShieldFailsafe = 8;
 // The rows of the last menu, for the next one to open on.
 static NSString *const kLastRowsKey = @"spotifyglass.redesign.player.menuRows";
 static const CGFloat kPanelWidth = 300, kPanelTop = 12;
@@ -42,7 +44,53 @@ static const CGFloat kPanelWidth = 300, kPanelTop = 12;
 static BOOL sgr_menuOn;
 static __weak UIView *sgr_moreButton;
 static NSTimeInterval sgr_moreTappedAt;
-static char kTakeoverKey, kWatchedKey, kDimmingKey, kMaskKey, kSavedMaskKey, kClaimKey, kTakenKey, kHiddenDimmingsKey, kAnchorKey;
+static id sgr_resignObserver, sgr_backgroundObserver, sgr_activeObserver;
+static char kTakeoverKey, kWatchedKey, kDimmingKey, kMaskKey, kSavedMaskKey, kClaimKey, kTakenKey, kHiddenDimmingsKey, kAnchorKey, kInputShieldKey;
+static void preloadRowsForCurrentContext(void);
+
+@interface SGRPlayerMenuInputShield : UIView
+@property (nonatomic, weak) UIView *button;
+@end
+
+@implementation SGRPlayerMenuInputShield
+@end
+
+static NSHashTable<SGRPlayerMenuInputShield *> *sgr_inputShields;
+
+static void removeInputShield(UIView *button) {
+    SGRPlayerMenuInputShield *shield = objc_getAssociatedObject(button, &kInputShieldKey);
+    if (!shield) return;
+    [shield removeFromSuperview];
+    objc_setAssociatedObject(button, &kInputShieldKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+static void removeAllInputShields(void) {
+    for (SGRPlayerMenuInputShield *shield in sgr_inputShields.allObjects) removeInputShield(shield.button);
+    sgr_moreTappedAt = 0;
+    sgr_moreButton = nil;
+}
+
+static void updateInputShield(UIView *button) {
+    UIWindow *window = button.window;
+    if (!window) return;
+    SGRPlayerMenuInputShield *shield = objc_getAssociatedObject(button, &kInputShieldKey);
+    if (shield) {
+        shield.frame = [button convertRect:button.bounds toView:window];
+        [window bringSubviewToFront:shield];
+        return;
+    }
+    shield = [[SGRPlayerMenuInputShield alloc] initWithFrame:[button convertRect:button.bounds toView:window]];
+    shield.button = button;
+    shield.backgroundColor = UIColor.clearColor;
+    shield.accessibilityElementsHidden = YES;
+    shield.isAccessibilityElement = NO;
+    objc_setAssociatedObject(button, &kInputShieldKey, shield, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [sgr_inputShields addObject:shield];
+    [window addSubview:shield];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kInputShieldFailsafe * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (objc_getAssociatedObject(button, &kInputShieldKey) == shield) removeInputShield(button);
+    });
+}
 
 #pragma mark - where each of Spotify's rows goes
 
@@ -89,10 +137,32 @@ static UIImage *symbol(NSString *name) {
 @end
 
 @implementation SGRPlayerMoreTapWatcher
+- (void)touchDown:(id)sender {
+    UIView *button = sender;
+    sgr_moreButton = button;
+    sgr_moreTappedAt = CACurrentMediaTime();
+    updateInputShield(button);
+}
 - (void)tapped:(id)sender {
     UIView *button = [sender isKindOfClass:UIGestureRecognizer.class] ? ((UIGestureRecognizer *)sender).view : sender;
     sgr_moreButton = button;
     sgr_moreTappedAt = CACurrentMediaTime();
+    if (![button isKindOfClass:UIControl.class]) updateInputShield(button);
+}
+- (void)touchCancelled:(id)sender {
+    UIView *button = sender;
+    removeInputShield(button);
+    if (sgr_moreButton == button) {
+        sgr_moreButton = nil;
+        sgr_moreTappedAt = 0;
+    }
+}
+- (void)guardTouchBegan:(UILongPressGestureRecognizer *)recognizer {
+    if (recognizer.state != UIGestureRecognizerStateBegan) return;
+    UIView *button = recognizer.view;
+    sgr_moreButton = button;
+    sgr_moreTappedAt = CACurrentMediaTime();
+    updateInputShield(button);
 }
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
     return YES;
@@ -104,10 +174,21 @@ void SGRPlayerMenuWatchMoreButton(UIView *button) {
     static SGRPlayerMoreTapWatcher *watcher;
     if (!watcher) watcher = [SGRPlayerMoreTapWatcher new];
     objc_setAssociatedObject(button, &kWatchedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    preloadRowsForCurrentContext();
     // An Encore button may read its touches through a gesture recognizer rather than as a control, so both
     // are watched, as Speed and pitch watches it.
     if ([button isKindOfClass:UIControl.class]) {
-        [(UIControl *)button addTarget:watcher action:@selector(tapped:) forControlEvents:UIControlEventTouchUpInside | UIControlEventPrimaryActionTriggered];
+        UIControl *control = (UIControl *)button;
+        [control addTarget:watcher action:@selector(touchDown:) forControlEvents:UIControlEventTouchDown];
+        [control addTarget:watcher action:@selector(tapped:) forControlEvents:UIControlEventTouchUpInside | UIControlEventPrimaryActionTriggered];
+        [control addTarget:watcher action:@selector(touchCancelled:) forControlEvents:UIControlEventTouchUpOutside | UIControlEventTouchCancel];
+    } else {
+        UILongPressGestureRecognizer *guard = [[UILongPressGestureRecognizer alloc] initWithTarget:watcher action:@selector(guardTouchBegan:)];
+        guard.minimumPressDuration = 0;
+        guard.cancelsTouchesInView = NO;
+        guard.delaysTouchesBegan = NO;
+        guard.delegate = watcher;
+        [button addGestureRecognizer:guard];
     }
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:watcher action:@selector(tapped:)];
     tap.cancelsTouchesInView = NO;
@@ -267,16 +348,31 @@ static void logNumbers(NSArray<SGRPlayerMenuSpotifyRow *> *rows) {
 #pragma mark - the rows of the last menu
 
 static NSArray<SGRPlayerMenuSpotifyRow *> *sgr_lastRows;
-static NSString *sgr_lastSignature;
+static NSString *sgr_lastSignature, *sgr_lastCacheKey;
+static NSMutableSet<NSString *> *sgr_cacheAttempts;
 
-static NSArray<SGRPlayerMenuSpotifyRow *> *lastRows(void) {
-    if (sgr_lastRows) return sgr_lastRows;
-    NSData *data = [NSUserDefaults.standardUserDefaults dataForKey:kLastRowsKey];
-    if (!data) return nil;
+static NSString *playerMenuCacheKey(void) {
+    SPTPlayerState *state = SGPlayerState();
+    NSString *track = SGURIString(state.track.URI);
+    if (!track.length) return nil;
+    return [NSString stringWithFormat:@"%@\n%@", track, SGURIString(state.contextURI) ?: @""];
+}
+
+static dispatch_queue_t playerMenuCacheQueue(void) {
+    static dispatch_queue_t queue;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ queue = dispatch_queue_create("spotifyglass.redesign.playerMenuCache", DISPATCH_QUEUE_SERIAL); });
+    return queue;
+}
+
+static NSArray<SGRPlayerMenuSpotifyRow *> *decodeCachedRows(NSData *data, NSString *cacheKey) {
+    if (!data || !cacheKey.length) return nil;
     NSSet *classes = [NSSet setWithObjects:NSArray.class, NSDictionary.class, NSString.class, NSNumber.class, UIImage.class, nil];
     id stored = [NSKeyedUnarchiver unarchivedObjectOfClasses:classes fromData:data error:nil];
+    if (![stored isKindOfClass:NSDictionary.class] || ![stored[@"cacheKey"] isEqualToString:cacheKey]) return nil;
+    NSArray *entries = [stored[@"rows"] isKindOfClass:NSArray.class] ? stored[@"rows"] : @[];
     NSMutableArray<SGRPlayerMenuSpotifyRow *> *rows = [NSMutableArray array];
-    for (NSDictionary *entry in [stored isKindOfClass:NSArray.class] ? stored : @[]) {
+    for (NSDictionary *entry in entries) {
         if (![entry isKindOfClass:NSDictionary.class] || ![entry[@"id"] isKindOfClass:NSString.class] || ![entry[@"title"] isKindOfClass:NSString.class]) continue;
         SGRPlayerMenuSpotifyRow *row = [SGRPlayerMenuSpotifyRow new];
         row.identifier = entry[@"id"];
@@ -286,16 +382,42 @@ static NSArray<SGRPlayerMenuSpotifyRow *> *lastRows(void) {
         row.disabled = [entry[@"disabled"] boolValue];
         [rows addObject:row];
     }
-    sgr_lastRows = rows.count ? rows : nil;
-    sgr_lastSignature = sgr_lastRows ? signatureOf(sgr_lastRows) : nil;
-    return sgr_lastRows;
+    return rows.count ? rows : nil;
+}
+
+static void preloadRowsForCurrentContext(void) {
+    NSString *cacheKey = playerMenuCacheKey();
+    if (!cacheKey.length) return;
+    @synchronized (SGRPlayerMenuSpotifyRow.class) {
+        if ([sgr_lastCacheKey isEqualToString:cacheKey] && sgr_lastRows) return;
+        if (!sgr_cacheAttempts) sgr_cacheAttempts = [NSMutableSet set];
+        if ([sgr_cacheAttempts containsObject:cacheKey]) return;
+        [sgr_cacheAttempts addObject:cacheKey];
+    }
+    dispatch_async(playerMenuCacheQueue(), ^{
+        NSData *data = [NSUserDefaults.standardUserDefaults dataForKey:kLastRowsKey];
+        NSArray<SGRPlayerMenuSpotifyRow *> *rows = decodeCachedRows(data, cacheKey);
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (![playerMenuCacheKey() isEqualToString:cacheKey]
+                || [sgr_lastCacheKey isEqualToString:cacheKey]) return;
+            sgr_lastRows = rows;
+            sgr_lastSignature = rows ? signatureOf(rows) : nil;
+            sgr_lastCacheKey = rows ? cacheKey : nil;
+        });
+    });
+}
+
+static NSArray<SGRPlayerMenuSpotifyRow *> *lastRows(NSString *cacheKey) {
+    return cacheKey.length && [sgr_lastCacheKey isEqualToString:cacheKey] ? sgr_lastRows : nil;
 }
 
 // Kept only when they differ from what is kept. A row the menu draws with a glyph of its own keeps no picture.
-static void keepRows(NSArray<SGRPlayerMenuSpotifyRow *> *rows, NSString *signature) {
-    if ([signature isEqualToString:sgr_lastSignature]) return;
+static void keepRows(NSArray<SGRPlayerMenuSpotifyRow *> *rows, NSString *signature, NSString *cacheKey) {
+    BOOL same = [signature isEqualToString:sgr_lastSignature] && [cacheKey isEqualToString:sgr_lastCacheKey];
     sgr_lastRows = rows;
     sgr_lastSignature = signature;
+    sgr_lastCacheKey = cacheKey;
+    if (same || !cacheKey.length) return;
     NSMutableArray *stored = [NSMutableArray array], *bare = [NSMutableArray array];
     for (SGRPlayerMenuSpotifyRow *row in rows) {
         NSMutableDictionary *entry = [@{@"id": row.identifier, @"title": row.title, @"disabled": @(row.disabled)} mutableCopy];
@@ -305,9 +427,13 @@ static void keepRows(NSArray<SGRPlayerMenuSpotifyRow *> *rows, NSString *signatu
         [stored addObject:entry];
     }
     // A picture that does not archive costs the pictures, not the rows.
-    NSData *data = [NSKeyedArchiver archivedDataWithRootObject:stored requiringSecureCoding:YES error:nil]
-        ?: [NSKeyedArchiver archivedDataWithRootObject:bare requiringSecureCoding:YES error:nil];
-    if (data) [NSUserDefaults.standardUserDefaults setObject:data forKey:kLastRowsKey];
+    NSDictionary *snapshot = @{@"cacheKey": cacheKey, @"rows": stored};
+    NSDictionary *fallback = @{@"cacheKey": cacheKey, @"rows": bare};
+    dispatch_async(playerMenuCacheQueue(), ^{
+        NSData *data = [NSKeyedArchiver archivedDataWithRootObject:snapshot requiringSecureCoding:YES error:nil]
+            ?: [NSKeyedArchiver archivedDataWithRootObject:fallback requiringSecureCoding:YES error:nil];
+        if (data) [NSUserDefaults.standardUserDefaults setObject:data forKey:kLastRowsKey];
+    });
 }
 
 #pragma mark - where the menu opens from
@@ -316,17 +442,22 @@ static void keepRows(NSArray<SGRPlayerMenuSpotifyRow *> *rows, NSString *signatu
 // the ⋯ stays Spotify's, and a long press on it opens nothing.
 @interface SGRPlayerMenuAnchor : UIButton
 @property (nonatomic, copy) void (^shown)(void);
+@property (nonatomic, copy) void (^willClose)(void);
 @property (nonatomic, copy) void (^closed)(void);
 @end
 
 @implementation SGRPlayerMenuAnchor
 - (void)contextMenuInteraction:(UIContextMenuInteraction *)interaction willDisplayMenuForConfiguration:(UIContextMenuConfiguration *)configuration animator:(id<UIContextMenuInteractionAnimating>)animator {
     if ([UIButton instancesRespondToSelector:_cmd]) [super contextMenuInteraction:interaction willDisplayMenuForConfiguration:configuration animator:animator];
-    if (self.shown) self.shown();
+    void (^shown)(void) = self.shown;
+    if (!shown) return;
+    if (animator) [animator addCompletion:shown];
+    else shown();
 }
 
 - (void)contextMenuInteraction:(UIContextMenuInteraction *)interaction willEndForConfiguration:(UIContextMenuConfiguration *)configuration animator:(id<UIContextMenuInteractionAnimating>)animator {
     if ([UIButton instancesRespondToSelector:_cmd]) [super contextMenuInteraction:interaction willEndForConfiguration:configuration animator:animator];
+    if (self.willClose) self.willClose();
     void (^closed)(void) = self.closed;
     if (!closed) return;
     if (animator) [animator addCompletion:closed];
@@ -408,7 +539,9 @@ static SGRPlayerMenuAnchor *anchorIn(UIView *button) {
 @property (nonatomic, strong) SGRPlayerMenuAnchor *anchor;
 @property (nonatomic, copy) NSArray<SGRPlayerMenuSpotifyRow *> *rows;
 @property (nonatomic, copy) NSString *signature;
+@property (nonatomic, copy) NSString *cacheKey;
 @property (nonatomic) BOOL hasRows, complete, opened, shown, closed, revealed, finished, pickRan;
+@property (nonatomic) BOOL passScheduled, scanning;
 // Showing the last menu's rows until Spotify's are in; a row picked meanwhile, fired once they are.
 @property (nonatomic) BOOL provisional;
 @property (nonatomic, copy) NSString *pendingIdentifier;
@@ -418,16 +551,35 @@ static SGRPlayerMenuAnchor *anchorIn(UIView *button) {
 @property (nonatomic) NSTimeInterval tappedAt;
 @property (nonatomic, strong) NSTimer *poll;
 @property (nonatomic, copy) void (^pick)(SGRPlayerMenuTakeover *t);
-// The loading row's, while the menu has no rows at all to show.
-@property (nonatomic, copy) void (^loadingDone)(NSArray<UIMenuElement *> *elements);
 @end
 
 @implementation SGRPlayerMenuTakeover
 - (void)dealloc {
     [_poll invalidate];
-    if (_loadingDone) _loadingDone(@[]);
+    removeInputShield(_button);
 }
 @end
+
+static void pass(SGRPlayerMenuTakeover *t);
+static void requestPass(SGRPlayerMenuTakeover *t);
+
+static NSHashTable<SGRPlayerMenuTakeover *> *sgr_activeTakeovers;
+
+static void stopPoll(SGRPlayerMenuTakeover *t) {
+    [t.poll invalidate];
+    t.poll = nil;
+}
+
+static void pauseMenuWork(void) {
+    removeAllInputShields();
+    for (SGRPlayerMenuTakeover *t in sgr_activeTakeovers.allObjects) {
+        stopPoll(t);
+        t.pendingIdentifier = nil;
+        t.pendingAt = 0;
+        t.pick = nil;
+        t.pickRan = YES;
+    }
+}
 
 static UIViewController *presentedSheet(UIViewController *menu) {
     UIViewController *top = menu;
@@ -529,7 +681,8 @@ static void hideSheet(SGRPlayerMenuTakeover *t, UIView *container) {
 static void reveal(SGRPlayerMenuTakeover *t, NSString *why) {
     if (t.revealed || t.finished) return;
     t.revealed = YES;
-    [t.poll invalidate];
+    stopPoll(t);
+    removeInputShield(t.button);
     SGLog(@"redesign player menu: Spotify's sheet shown, %@", why);
     objc_setAssociatedObject(t.sheet, &kClaimKey, @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (t.shown && !t.closed) [t.anchor.contextMenuInteraction dismissMenu];
@@ -540,11 +693,8 @@ static void reveal(SGRPlayerMenuTakeover *t, NSString *why) {
 static void finish(SGRPlayerMenuTakeover *t, NSString *why, void (^then)(void)) {
     if (t.finished || t.revealed) return;
     t.finished = YES;
-    [t.poll invalidate];
-    if (t.loadingDone) {
-        t.loadingDone(@[]);
-        t.loadingDone = nil;
-    }
+    stopPoll(t);
+    removeInputShield(t.button);
     UIViewController *sheet = t.sheet;
     if (!sheet.presentingViewController || sheet.isBeingDismissed) {
         if (then) then();
@@ -571,6 +721,7 @@ static void settle(SGRPlayerMenuTakeover *t) {
 }
 
 static void fire(SGRPlayerMenuTakeover *t, SGRPlayerMenuSpotifyRow *row) {
+    stopPoll(t);
     UITableView *table = tableIn(t.menu.viewIfLoaded, 0);
     __block BOOL fired = NO;
     if (table) {
@@ -607,6 +758,15 @@ static void hold(SGRPlayerMenuTakeover *t, SGRPlayerMenuSpotifyRow *row) {
     t.pendingAt = at;
     SGLog(@"redesign player menu: \"%@\" (%@) picked %.2f s after the ⋯, before Spotify's rows are in, held", row.title, row.identifier, at - t.tappedAt);
     __weak SGRPlayerMenuTakeover *weak = t;
+    t.poll = [NSTimer timerWithTimeInterval:kRowsPoll repeats:YES block:^(NSTimer *timer) {
+        SGRPlayerMenuTakeover *strong = weak;
+        if (!strong || !strong.pendingIdentifier || strong.finished || strong.revealed || strong.complete) {
+            [timer invalidate];
+            return;
+        }
+        pass(strong);
+    }];
+    [NSRunLoop.mainRunLoop addTimer:t.poll forMode:NSRunLoopCommonModes];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kRowsWait * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         SGRPlayerMenuTakeover *strong = weak;
         if (!strong || !strong.pendingIdentifier || strong.pendingAt != at) return;
@@ -631,10 +791,12 @@ static void pick(SGRPlayerMenuTakeover *t, void (^what)(SGRPlayerMenuTakeover *t
 static void menuClosed(SGRPlayerMenuTakeover *t) {
     if (!t || t.closed) return;
     t.closed = YES;
+    removeInputShield(t.button);
     if (t.pick) {
         runPick(t);
         return;
     }
+    stopPoll(t);
     __weak SGRPlayerMenuTakeover *weak = t;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kPickGrace * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         SGRPlayerMenuTakeover *strong = weak;
@@ -714,6 +876,11 @@ static UIMenu *menuFor(SGRPlayerMenuTakeover *t) {
         [main insertObject:tiles.lastObject atIndex:0];
         [tiles removeLastObject];
     }
+    if (!rows.count) {
+        UIAction *loading = [UIAction actionWithTitle:@"Loading..." image:nil identifier:nil handler:nil];
+        loading.attributes = UIMenuElementAttributesDisabled;
+        [main addObject:loading];
+    }
     [main addObject:speedAndPitchAction(t)];
     if (more.count == 1) {
         [feedback addObject:more.firstObject];
@@ -728,14 +895,6 @@ static UIMenu *menuFor(SGRPlayerMenuTakeover *t) {
         [groups addObject:tileGroup];
     }
     [groups addObject:group(main)];
-    if (!rows.count) {
-        __weak SGRPlayerMenuTakeover *weak = t;
-        [groups addObject:group(@[[UIDeferredMenuElement elementWithProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
-            SGRPlayerMenuTakeover *strong = weak;
-            if (!strong || strong.hasRows || strong.finished || strong.revealed) completion(@[]);
-            else strong.loadingDone = completion;
-        }]])];
-    }
     if (feedback.count) [groups addObject:group(feedback)];
     if (destructive.count) [groups addObject:group(destructive)];
     return [UIMenu menuWithTitle:@"" children:groups];
@@ -746,10 +905,6 @@ static void showRows(SGRPlayerMenuTakeover *t) {
     UIMenu *menu = menuFor(t);
     t.anchor.menu = menu;
     if (t.shown && !t.closed) [t.anchor.contextMenuInteraction updateVisibleMenuWithBlock:^UIMenu *(UIMenu *visible) { return menu; }];
-    if (t.rows.count && t.loadingDone) {
-        t.loadingDone(@[]);
-        t.loadingDone = nil;
-    }
 }
 
 static void openMenu(SGRPlayerMenuTakeover *t) {
@@ -760,7 +915,19 @@ static void openMenu(SGRPlayerMenuTakeover *t) {
     if (button.window) {
         t.anchor = anchorIn(button);
         __weak SGRPlayerMenuTakeover *weak = t;
-        t.anchor.shown = ^{ weak.shown = YES; };
+        t.anchor.shown = ^{
+            SGRPlayerMenuTakeover *strong = weak;
+            if (!strong) return;
+            strong.shown = YES;
+            removeInputShield(strong.button);
+            requestPass(strong);
+        };
+        t.anchor.willClose = ^{
+            SGRPlayerMenuTakeover *strong = weak;
+            if (!strong) return;
+            removeInputShield(strong.button);
+            if (!strong.pick) stopPoll(strong);
+        };
         t.anchor.closed = ^{ menuClosed(weak); };
         showRows(t);
     }
@@ -781,7 +948,22 @@ static void openMenu(SGRPlayerMenuTakeover *t) {
 #pragma mark the pass
 
 static void pass(SGRPlayerMenuTakeover *t) {
-    if (t.revealed || t.finished) return;
+    if (t.revealed || t.finished || !t.shown || t.scanning) return;
+    NSString *cacheKey = playerMenuCacheKey();
+    if (![cacheKey isEqualToString:t.cacheKey]) {
+        t.cacheKey = cacheKey;
+        t.hasRows = NO;
+        t.complete = NO;
+        t.provisional = NO;
+        t.rowsByIdentifier = nil;
+        NSArray<SGRPlayerMenuSpotifyRow *> *cached = lastRows(cacheKey);
+        t.rows = cached ?: @[];
+        t.signature = cached ? signatureOf(cached) : nil;
+        t.provisional = cached.count > 0;
+        showRows(t);
+    }
+    if (t.complete) return;
+    t.scanning = YES;
     UIViewController *menu = t.menu;
     if (!t.sheet) t.sheet = presentedSheet(menu);
     if (!t.player) t.player = t.sheet.presentingViewController;
@@ -791,7 +973,10 @@ static void pass(SGRPlayerMenuTakeover *t) {
     UITableView *table = tableIn(menu.viewIfLoaded, 0);
     BOOL complete = NO;
     NSArray<SGRPlayerMenuSpotifyRow *> *rows = table ? readRows(table, &complete) : @[];
-    if (!rows.count) return;
+    if (!rows.count) {
+        t.scanning = NO;
+        return;
+    }
     BOOL first = !t.hasRows;
     t.hasRows = YES;
     t.provisional = NO;
@@ -805,16 +990,23 @@ static void pass(SGRPlayerMenuTakeover *t) {
               [signature isEqualToString:t.signature] ? @"the last menu's" : t.signature ? @"not the last menu's" : @"none shown before",
               complete ? @"" : @" (not all of them read yet)");
     }
+    BOOL hadPendingRow = t.pendingIdentifier != nil;
     // Only a whole menu is kept for the next one to open on, and a held pick waits for the whole menu
     // before it is given up.
     if (complete) {
-        [t.poll invalidate];
-        keepRows(rows, signature);
+        stopPoll(t);
+        keepRows(rows, signature, t.cacheKey);
     }
     SGRPlayerMenuSpotifyRow *pending = t.pendingIdentifier ? byIdentifier[t.pendingIdentifier] : nil;
     if (pending || complete) t.pendingIdentifier = nil;
     if (pending) {
+        t.scanning = NO;
         fire(t, pending);
+        return;
+    }
+    if (complete && hadPendingRow && t.pick) {
+        t.scanning = NO;
+        reveal(t, @"the provisional row is no longer available");
         return;
     }
     if (![signature isEqualToString:t.signature]) {
@@ -823,6 +1015,21 @@ static void pass(SGRPlayerMenuTakeover *t) {
         logNumbers(rows);
         showRows(t);
     }
+    t.scanning = NO;
+}
+
+static void requestPass(SGRPlayerMenuTakeover *t) {
+    if (!t || t.revealed || t.finished || !t.shown || t.scanning || t.passScheduled
+        || (t.closed && !t.pendingIdentifier)
+        || (t.complete && [playerMenuCacheKey() isEqualToString:t.cacheKey])) return;
+    t.passScheduled = YES;
+    __weak SGRPlayerMenuTakeover *weak = t;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        SGRPlayerMenuTakeover *strong = weak;
+        if (!strong) return;
+        strong.passScheduled = NO;
+        pass(strong);
+    });
 }
 
 static BOOL moreTappedRecently(void) {
@@ -853,10 +1060,12 @@ static SGRPlayerMenuTakeover *takeoverFor(UIViewController *menu) {
     sgr_moreTappedAt = 0;
     t.menu = menu;
     t.button = sgr_moreButton;
+    t.cacheKey = playerMenuCacheKey();
     UIViewController *sheet = presentedSheet(menu);
     if (sheet) objc_setAssociatedObject(sheet, &kTakenKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(menu, &kTakeoverKey, t, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NSArray<SGRPlayerMenuSpotifyRow *> *last = lastRows();
+    [sgr_activeTakeovers addObject:t];
+    NSArray<SGRPlayerMenuSpotifyRow *> *last = lastRows(t.cacheKey);
     if (last.count) {
         t.provisional = YES;
         t.rows = last;
@@ -864,82 +1073,44 @@ static SGRPlayerMenuTakeover *takeoverFor(UIViewController *menu) {
     }
 
     __weak SGRPlayerMenuTakeover *weak = t;
-    t.poll = [NSTimer timerWithTimeInterval:kRowsPoll repeats:YES block:^(NSTimer *timer) {
-        SGRPlayerMenuTakeover *strong = weak;
-        if (!strong || strong.complete || strong.finished || strong.revealed) {
-            [timer invalidate];
-            return;
-        }
-        UITableView *table = tableIn(strong.menu.viewIfLoaded, 0);
-        if (table && rowCount(table) > 0) pass(strong);
-    }];
-    [NSRunLoop.mainRunLoop addTimer:t.poll forMode:NSRunLoopCommonModes];
-    // Spotify's rows are waited on for as long as the menu is open, the table looked at until they are all
-    // in. What is worth saying by kRowsWait is whether they are late, and whether they are there and unreadable.
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kRowsWait * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         SGRPlayerMenuTakeover *strong = weak;
-        if (!strong || strong.hasRows || strong.finished || strong.revealed) return;
+        if (!strong || strong.closed || strong.finished || strong.revealed || strong.hasRows) return;
         UITableView *table = tableIn(strong.menu.viewIfLoaded, 0);
-        if (table && rowCount(table) > 0) {
-            reveal(strong, [NSString stringWithFormat:@"the table has %ld rows and none could be read", (long)rowCount(table)]);
-            return;
-        }
-        SGLog(@"redesign player menu: no rows of Spotify's %.0f s after the tap, still waiting with %@", kRowsWait,
-              strong.provisional ? @"the last menu's rows" : @"a loading row");
+        if (!table || rowCount(table) == 0) return;
+        reveal(strong, @"the table has rows and none could be read");
     });
+
     SGLog(@"redesign player menu: the ⋯'s sheet taken over");
     return t;
 }
 
-#pragma mark - what darkens the screen as the menu opens
-
-// A dark picture across the screen flashed as the menu opened on the phone, with the sheet and its dimming
-// out of sight from the presentation's first frame (device, 2026-09-24). So the first menus of a launch say
-// what they find at a few moments after the ⋯'s tap: every view drawn dark over most of the window, and the
-// windows themselves.
-static NSString *darkness(UIColor *color) {
-    CGFloat white = 1, alpha = 0;
-    if (!color || ![color getWhite:&white alpha:&alpha]) {
-        CGFloat r, g, b;
-        if (![color getRed:&r green:&g blue:&b alpha:&alpha]) return nil;
-        white = (r + g + b) / 3;
+static UIViewController *contextMenuControllerFor(UIView *view) {
+    for (UIResponder *responder = view; responder; responder = responder.nextResponder) {
+        if (![responder isKindOfClass:UIViewController.class]) continue;
+        UIViewController *controller = (UIViewController *)responder;
+        if ([NSStringFromClass(controller.class) containsString:@"ContextMenu"]) return controller;
     }
-    return alpha >= 0.3 && white < 0.15 ? [NSString stringWithFormat:@"%.2f@%.2f", white, alpha] : nil;
+    return nil;
 }
 
-static void findDark(UIView *view, UIView *window, CGFloat alpha, int depth, NSMutableArray<NSString *> *out) {
-    if (view.hidden || view.alpha < 0.01 || depth > 40 || out.count > 20) return;
-    alpha *= view.alpha;
-    CGRect frame = [view convertRect:view.bounds toView:window];
-    CGRect screen = CGRectIntersection(frame, window.bounds);
-    BOOL covers = !CGRectIsNull(screen) && screen.size.width * screen.size.height > 0.6 * window.bounds.size.width * window.bounds.size.height;
-    if (!covers) return;
-    NSString *dark = darkness(view.backgroundColor) ?: (view.layer.backgroundColor ? darkness([UIColor colorWithCGColor:view.layer.backgroundColor]) : nil);
-    if (dark && alpha > 0.05) {
-        [out addObject:[NSString stringWithFormat:@"%@%@ bg %@ alpha %.2f", NSStringFromClass(view.class),
-                        view.accessibilityIdentifier.length ? [@" id=" stringByAppendingString:view.accessibilityIdentifier] : @"", dark, alpha]];
-    }
-    for (UIView *child in view.subviews) findDark(child, window, alpha, depth + 1, out);
+%hook UITableView
+
+- (void)reloadData {
+    %orig;
+    UIViewController *menu = contextMenuControllerFor((UIView *)self);
+    SGRPlayerMenuTakeover *t = menu ? objc_getAssociatedObject(menu, &kTakeoverKey) : nil;
+    if ([t isKindOfClass:SGRPlayerMenuTakeover.class]) requestPass(t);
 }
 
-static void logDarkness(UIView *anyView) {
-    static int menus;
-    if (menus++ >= 2) return;
-    for (NSNumber *after in @[@0, @0.02, @0.05, @0.1, @0.2, @0.4]) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(after.doubleValue * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            UIWindowScene *scene = anyView.window.windowScene;
-            NSMutableArray<NSString *> *lines = [NSMutableArray array];
-            for (UIWindow *window in scene.windows) {
-                if (window.hidden) continue;
-                NSMutableArray<NSString *> *dark = [NSMutableArray array];
-                findDark(window, window, 1, 0, dark);
-                [lines addObject:[NSString stringWithFormat:@"%@ level %.0f: %@", NSStringFromClass(window.class), window.windowLevel,
-                                  dark.count ? [dark componentsJoinedByString:@"; "] : @"nothing dark over it"]];
-            }
-            SGLog(@"redesign player menu: %.2f s after the sheet began: %@", after.doubleValue, [lines componentsJoinedByString:@" | "]);
-        });
-    }
+- (void)layoutSubviews {
+    %orig;
+    UIViewController *menu = contextMenuControllerFor((UIView *)self);
+    SGRPlayerMenuTakeover *t = menu ? objc_getAssociatedObject(menu, &kTakeoverKey) : nil;
+    if ([t isKindOfClass:SGRPlayerMenuTakeover.class]) requestPass(t);
 }
+
+%end
 
 // The sheet and its dimming go out of sight as the presentation begins, before its first frame: the menu's
 // own appearance comes later than that, and hiding them only from there let the dimming's black and the sheet
@@ -955,14 +1126,13 @@ static void logDarkness(UIView *anyView) {
     if (!moreTappedRecently() || !menu) return;
     objc_setAssociatedObject(sheet, &kClaimKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     hidePresentation(presentation.presentedView, presentation.containerView);
-    logDarkness(presentation.containerView ?: presentation.presentingViewController.view);
+    updateInputShield(sgr_moreButton);
     // A menu asked for from inside this call is never shown; from the next turn it is, and stays.
     __weak UIViewController *weakMenu = menu;
     dispatch_async(dispatch_get_main_queue(), ^{
         UIViewController *strongMenu = weakMenu;
         SGRPlayerMenuTakeover *t = strongMenu ? takeoverFor(strongMenu) : nil;
         if (!t) return;
-        pass(t);
         openMenu(t);
     });
     // A claimed sheet whose menu is never taken over would stay out of sight with nothing in its place.
@@ -972,6 +1142,7 @@ static void logDarkness(UIView *anyView) {
         UIViewController *presented = strong.presentedViewController;
         if (!presented || objc_getAssociatedObject(presented, &kTakenKey) || ![objc_getAssociatedObject(presented, &kClaimKey) boolValue]) return;
         SGLog(@"redesign player menu: no menu taken over in the ⋯'s sheet within %.0f s, the sheet shown", kClaimWait);
+        removeInputShield(sgr_moreButton);
         objc_setAssociatedObject(presented, &kClaimKey, @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         showPresentation(strong.presentedView, strong.containerView);
     });
@@ -991,20 +1162,13 @@ static void logDarkness(UIView *anyView) {
 
 - (void)viewWillAppear:(BOOL)animated {
     %orig;
-    SGRPlayerMenuTakeover *t = takeoverFor((UIViewController *)self);
-    if (t) pass(t);
-}
-
-- (void)viewDidLayoutSubviews {
-    %orig;
-    SGRPlayerMenuTakeover *t = takeoverFor((UIViewController *)self);
-    if (t) pass(t);
+    takeoverFor((UIViewController *)self);
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
     SGRPlayerMenuTakeover *t = objc_getAssociatedObject(self, &kTakeoverKey);
-    if ([t isKindOfClass:SGRPlayerMenuTakeover.class]) pass(t);
+    if ([t isKindOfClass:SGRPlayerMenuTakeover.class]) requestPass(t);
 }
 
 // The sheet going away takes the menu with it; a page of Spotify's pushed onto it shows the sheet.
@@ -1016,6 +1180,8 @@ static void logDarkness(UIView *anyView) {
     UIViewController *sheet = t.sheet;
     BOOL leaving = !sheet.presentingViewController || sheet.isBeingDismissed || sheet.presentingViewController.isBeingDismissed;
     if (leaving) {
+        removeInputShield(t.button);
+        if (!t.pendingIdentifier) stopPoll(t);
         if (t.shown && !t.closed) [t.anchor.contextMenuInteraction dismissMenu];
     } else if (navigation.viewControllers.count > 1) {
         reveal(t, @"Spotify opened a page of its own on it");
@@ -1027,6 +1193,17 @@ static void logDarkness(UIView *anyView) {
 %ctor {
     if (!SGRedesignedUI()) return;
     sgr_menuOn = YES;
+    sgr_inputShields = [NSHashTable weakObjectsHashTable];
+    sgr_activeTakeovers = [NSHashTable weakObjectsHashTable];
+    NSNotificationCenter *notifications = NSNotificationCenter.defaultCenter;
+    sgr_resignObserver = [notifications addObserverForName:UIApplicationWillResignActiveNotification object:nil
+                                                      queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { pauseMenuWork(); }];
+    sgr_backgroundObserver = [notifications addObserverForName:UIApplicationDidEnterBackgroundNotification object:nil
+                                                          queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { pauseMenuWork(); }];
+    sgr_activeObserver = [notifications addObserverForName:UIApplicationDidBecomeActiveNotification object:nil
+                                                       queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
+        for (SGRPlayerMenuTakeover *t in sgr_activeTakeovers.allObjects) requestPass(t);
+    }];
     %init;
     SGRequireClasses(@[@"_TtC24ContextMenu_InternalImpl25ContextMenuViewController", @"_TtC22NavigationUI_SheetImpl27SheetPresentationController"]);
 }

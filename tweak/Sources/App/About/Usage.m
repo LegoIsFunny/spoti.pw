@@ -73,30 +73,5 @@ static NSString *installKind(void) {
 }
 
 NSData *SGUsageBody(void) {
-    if (!usageOn()) return nil;
-    NSMutableDictionary *body = [NSMutableDictionary dictionary];
-    body[@"id"] = installID();
-    body[@"mod"] = @SG_VERSION;
-    body[@"spotify"] = NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"];
-    body[@"ios"] = UIDevice.currentDevice.systemVersion;
-    body[@"device"] = device();
-    body[@"ui"] = SGRedesignedUI() ? @"redesigned" : @"native";
-    body[@"kind"] = installKind();
-    body[@"cert"] = SGCertificateKind();
-    body[@"lang"] = NSLocale.currentLocale.languageCode;
-    body[@"region"] = NSLocale.currentLocale.countryCode;
-    body[@"features"] = @{
-        @"dsp": @(SGHidden(SGKeyDSP)),
-        @"liveActivity": @(SGFlag(SGKeyLiveActivity, NO)),
-        @"lockScreenLyrics": @(SGFlag(SGKeyLockScreenLyrics, NO)),
-        @"musicHaptics": @(SGFlag(SGKeyMusicHaptics, NO)),
-        @"controlHaptics": @(SGEnabled(SGKeyControlHaptics)),
-        @"artistBlock": @(SGFlag(SGKeyArtistBlock, NO)),
-        @"gestures": @(SGFlag(SGKeyGestures, NO)),
-        @"blockTelemetry": @(SGEnabled(SGKeyBlockTelemetry)),
-        @"lyricsCard": @(SGFlag(SGKeyLyricsCard, NO)),
-        @"amoled": @(SGFlag(SGKeyAmoled, NO)),
-    };
-    body[@"lyrics"] = SGLyricsOrder();
-    return [NSJSONSerialization dataWithJSONObject:body options:0 error:NULL];
+    return nil;
 }

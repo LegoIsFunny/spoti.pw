@@ -9,8 +9,7 @@
 #import "Core/SGCore.h"
 #import "About.h"
 
-NSString *const SGUpdateURL = @"https://spoti.pw/api/update";
-static NSString *const kGitHubURL = @"https://api.github.com/repos/skopevoj/spoti.pw/releases?per_page=100";
+NSString *const SGUpdateURL = @"https://api.github.com/repos/LegoIsFunny/spoti.pw/releases?per_page=100";
 NSString *const SGUpdateCheckedNotification = @"spotifyglass.update.checked.notification";
 
 static NSString *const kChecked = @"spotifyglass.update.checked";
@@ -219,9 +218,7 @@ void SGCheckForUpdate(BOOL force) {
     NSUserDefaults *store = NSUserDefaults.standardUserDefaults;
     NSTimeInterval last = [store doubleForKey:kChecked];
     if (sg_running) return;
-    // The day's count goes out with the first check of the day, whatever the six hours say.
-    BOOL owed = SGUsageOwed();
-    if (!force && !owed && last > 0 && NSDate.date.timeIntervalSince1970 - last < kInterval) return;
+    if (!force && last > 0 && NSDate.date.timeIntervalSince1970 - last < kInterval) return;
 
     sg_running = YES;
     sg_failure = nil;
@@ -242,12 +239,6 @@ void SGCheckForUpdate(BOOL force) {
             [NSNotificationCenter.defaultCenter postNotificationName:SGUpdateCheckedNotification object:nil];
         });
     };
-    NSData *body = SGUsageBody();
-    if (body) SGUsageNoteAsked();
-    SGLog(@"update check: asking spoti.pw %@", body ? @"with the usage body" : @"without the usage body");
-    ask(SGUpdateURL, body, ^(NSArray<NSDictionary *> *releases, NSInteger status, NSError *error) {
-        if (releases) return finish(releases, status, error);
-        SGLog(@"update check: spoti.pw answered HTTP %ld, asking GitHub", (long)status);
-        ask(kGitHubURL, nil, finish);
-    });
+    SGLog(@"update check: asking GitHub");
+    ask(SGUpdateURL, nil, finish);
 }

@@ -1,10 +1,10 @@
 // The donate sheet and the Ko-fi button over a stand-in Home: `sheet` brings the sheet up a second in,
-// `tour` shows the button alone, as the welcome tour has it, and `certificate` brings up the certificate
-// offer with spoti.pw's copy (the logo from the file in HARNESS_LOGO, the glyph without one).
+// `tour` shows the button alone, as the welcome tour has it, and `signing` shows the passive signing status.
 #import <UIKit/UIKit.h>
 #import "App/Donate/Donate.h"
 #import "App/About/About.h"
 #import "App/Sheet/SGCardSheet.h"
+#import "Settings/SGModPage.h"
 
 BOOL SGOnboardingShowing(void) { return NO; }
 BOOL SGUpdateNoticeShown(void) { return NO; }
@@ -48,20 +48,12 @@ static UIViewController *home(void) {
     [self.window makeKeyAndVisible];
     if ([NSProcessInfo.processInfo.arguments containsObject:@"sheet"])
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ SGShowDonateSheet(); });
-    if ([NSProcessInfo.processInfo.arguments containsObject:@"certificate"]) {
-        NSString *path = NSProcessInfo.processInfo.environment[@"HARNESS_LOGO"];
-        UIImage *logo = path ? [UIImage imageWithData:[NSData dataWithContentsOfFile:path] scale:3] : nil;
-        NSDictionary *offer = @{
-            @"show": @YES,
-            @"title": @"Re-signing every week?",
-            @"message": @"Your signature runs out on {date}. A certificate lasts a year, with no 3-app limit.",
-            @"note": @"From $8.89 at Arctic Sign. spoti.pw gets a share.",
-            @"action": @"Get a certificate",
-            @"dismiss": @"Not now",
-            @"url": @"https://spoti.pw/go/cert",
-            @"color": @"#257BFE",
-        };
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ SGShowCertificateSheet(offer, logo); });
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"signing"]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            SGModPage *page = [[SGModPage alloc] initWithTitle:@"Signing status" intro:nil
+                sections:@[SGSection(nil, @[SGCertificateRow()])] footer:nil];
+            [self.window.rootViewController presentViewController:page animated:YES completion:nil];
+        });
     }
     return YES;
 }

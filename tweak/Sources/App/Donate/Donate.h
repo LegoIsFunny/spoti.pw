@@ -14,4 +14,3 @@ void SGDonateAfterTour(BOOL restarting);
 BOOL SGDonateAfterTourPending(void);
 void SGOfferDonate(void);
 BOOL SGDonateShown(void);     // this run
-void SGDonateHoldOff(void);   // another sheet asked instead; the next ask waits a full round

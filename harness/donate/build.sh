@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds the donate harness for the simulator: the donate and certificate sheets and the page style, nothing of Spotify's.
+# Builds the donate harness for the simulator: the donate sheet, signing-status row and page style, nothing of Spotify's.
 set -e
 SRC=$(cd "$(dirname "$0")/../../tweak/Sources" && pwd)
 OUT=$(dirname "$0")/build
@@ -32,7 +32,7 @@ cat > "$OUT/DonateHarness.app/Info.plist" <<'PLIST'
 </dict>
 </dict></plist>
 PLIST
-# A free Apple ID's profile, 7 days long with 2 left, so the certificate sheet and row have a date.
+# A free Apple ID's profile with two days left, so the signing row shows its real expiry and countdown.
 cat > "$OUT/DonateHarness.app/embedded.mobileprovision" <<PROFILE
 <?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>

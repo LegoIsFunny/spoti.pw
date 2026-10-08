@@ -278,10 +278,10 @@ App:
                    the changelog of every release newer than the build, a line per commit) and the sheet a newer
                    release brings up on its own a few seconds after Spotify opens, once per release; backup, the
                    signing warning and the Mod page with the reset; how the app is signed (Certificate.m: free,
-                   paid, enterprise or no profile, sent with the usage ping), and for a free Apple ID a row with
-                   the day it runs out and, at most monthly, a certificate sheet worded by spoti.pw/api/certificate
+                   paid, enterprise or no profile, sent with the usage ping), and a passive signing-status row
+                   with the provisioning profile's actual expiration date and remaining validity
     Onboarding/    the welcome page over Home on the first launch, with Redesigned UI, offered again from the Mod page
-    Sheet/         the card the Ko-fi ask and the certificate offer rise in, with its glowing button
+    Sheet/         the card the Ko-fi ask rises in, with its glowing button
 
 Every key a feature stores starts with `spotifyglass.`, whatever it holds: Reset all settings on
 the Mod page removes by that prefix and has no list to keep up to date. It leaves `SGKeyStock` behind,

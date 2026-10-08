@@ -282,5 +282,4 @@ static SGModSettingsRow *ensureDrawerRow(UICollectionView *list) {
     SGCheckSigningOnce();
     SGWatchForUpdates();
     SGWatchForDonate();
-    SGWatchForCertificate();
 }

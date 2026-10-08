@@ -115,7 +115,7 @@ SGModRow *SGDonateRow(void) {
 // a run; after a tour, first or replayed from the Mod page, it always comes.
 static void offerWhenClear(NSInteger tries) {
     BOOL afterTour = SGDonateAfterTourPending();
-    if (!afterTour && (sg_offered || now() < nextAsk() || SGUpdateNoticeShown() || SGCertificateOfferShown())) return;
+    if (!afterTour && (sg_offered || now() < nextAsk() || SGUpdateNoticeShown())) return;
     UIViewController *top = SGTopController();
     BOOL busy = !top || SGOnboardingShowing() || [top isKindOfClass:UIAlertController.class]
         || UIApplication.sharedApplication.applicationState != UIApplicationStateActive;
@@ -133,10 +133,6 @@ static void offerWhenClear(NSInteger tries) {
 
 BOOL SGDonateShown(void) {
     return sg_offered;
-}
-
-void SGDonateHoldOff(void) {
-    if (nextAsk() < now() + kEvery) askAgainIn(kEvery);
 }
 
 void SGDonateAfterTour(BOOL restarting) {

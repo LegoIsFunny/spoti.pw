@@ -2,8 +2,14 @@
   <img src="docs/icon.png" width="96" alt="">
 </p>
 
-<h1 align="center">spoti.pw</h1>
+<h1 align="center">Auralis</h1>
 
+
+
+<p align="center">Rework of the 0.23.0 beta branch fork from spoti.pw before chroma (0.50.0). Hoping to reduce issues and bugs.</p>
+
+<p align="center">Below remains the same.</p>
+<h2 align="center">-</h2>
 <p align="center">Spotify, in glass.</p>
 
 <p align="center">

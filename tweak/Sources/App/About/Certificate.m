@@ -4,6 +4,7 @@
 #import <math.h>
 
 static const NSTimeInterval kDay = 86400;
+static const NSTimeInterval kFreeLongest = 8 * kDay;
 
 static NSDictionary *profile(void) {
     static NSDictionary *read;

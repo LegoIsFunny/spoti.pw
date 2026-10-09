@@ -73,5 +73,5 @@ static NSString *certificateStatus(void) {
 }
 
 SGModRow *SGCertificateRow(void) {
-    return SGWithSymbol(SGStatRow(@"Signing status", ^NSString *{ return certificateStatus(); }), @"signature");
+    return SGWithSymbol(SGStatRow(@"Signing", ^NSString *{ return certificateStatus(); }), @"signature");
 }

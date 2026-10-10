@@ -27,7 +27,7 @@ static const NSTimeInterval kRowsWait = 1.2;
 // A sheet hidden as its presentation begins and still without a menu taken over by then is shown again.
 static const NSTimeInterval kClaimWait = 0.35;
 // How often the table is looked at while the menu waits for Spotify's rows.
-static const NSTimeInterval kRowsPoll = 0.02;
+static const NSTimeInterval kRowsPoll = 0.1;
 // A menu the system has not shown by then is given up for Spotify's sheet.
 static const NSTimeInterval kShowWait = 0.35;
 // How long after the menu has closed a pick may still come in before the sheet is taken away.

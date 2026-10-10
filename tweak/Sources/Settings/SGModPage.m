@@ -567,6 +567,7 @@ static void showProgress(UITableViewCell *cell, SGModRow *row, BOOL animated) {
 - (instancetype)initWithTitle:(NSString *)title intro:(NSString *)intro sections:(NSArray<SGModSection *> *)sections footer:(NSString *)footer {
     if (!(self = [super initWithStyle:UITableViewStyleInsetGrouped])) return nil;
     self.title = title;
+    self.navigationItem.title = title;
     _sections = sections;
     _shown = [self rowsToShow];
     _intro = intro ? SGNote(intro) : nil;

@@ -106,7 +106,7 @@ void SGShowDonateSheet(void) {
 }
 
 SGModRow *SGDonateRow(void) {
-    SGModRow *row = SGWithSymbol(SGActionRow(@"Support spoti.pw", @"Buy the student behind it a coffee", ^{ SGShowDonateSheet(); }), @"cup.and.saucer.fill");
+    SGModRow *row = SGWithSymbol(SGActionRow(@"Support the original author", @"Donate via Ko-fi to the original spoti.pw author", ^{ SGShowDonateSheet(); }), @"cup.and.saucer.fill");
     row.color = SGKofiColor();
     return row;
 }

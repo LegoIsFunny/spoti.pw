@@ -51,9 +51,9 @@ static NSString *dateText(NSDate *date) {
 }
 
 static NSString *signingKindText(NSString *kind) {
-    if ([kind isEqualToString:@"free"]) return @"Free Apple ID";
-    if ([kind isEqualToString:@"paid"]) return @"Paid certificate";
-    if ([kind isEqualToString:@"enterprise"]) return @"Enterprise certificate";
+    if ([kind isEqualToString:@"free"]) return @"Free";
+    if ([kind isEqualToString:@"paid"]) return @"Paid";
+    if ([kind isEqualToString:@"enterprise"]) return @"Enterprise";
     return nil;
 }
 
@@ -61,14 +61,14 @@ static NSString *certificateStatus(void) {
     NSString *kind = signingKindText(SGCertificateKind());
     NSDate *expires = SGCertificateExpiry();
     if (!kind) return @"Signing status unavailable";
-    if (!expires) return [NSString stringWithFormat:@"%@ · expiration unavailable", kind];
+    if (!expires) return [NSString stringWithFormat:@"%@ · expiry unavailable", kind];
 
     NSString *date = dateText(expires);
     NSTimeInterval remaining = [expires timeIntervalSinceNow];
     if (remaining <= 0) return [NSString stringWithFormat:@"%@ · expired %@", kind, date];
 
     NSUInteger days = (NSUInteger)ceil(remaining / kDay);
-    NSString *left = days == 1 ? @"1 day left" : [NSString stringWithFormat:@"%lu days left", (unsigned long)days];
+    NSString *left = [NSString stringWithFormat:@"%lud left", (unsigned long)days];
     return [NSString stringWithFormat:@"%@ · %@ · %@", kind, date, left];
 }
 

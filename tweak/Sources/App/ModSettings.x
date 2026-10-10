@@ -46,10 +46,10 @@ static UIViewController *modSettingsPage(void) {
     SGModRow *signing = SGSigningWarningRow();
     if (signing) [warnings addObject:signing];
     if (warnings.count) [sections addObject:SGSection(nil, warnings)];
-    NSMutableArray<SGModRow *> *support = [NSMutableArray arrayWithObject:SGDonateRow()];
+    NSMutableArray<SGModRow *> *support = [NSMutableArray array];
     SGModRow *certificate = SGCertificateRow();
     if (certificate) [support addObject:certificate];
-    [sections addObject:SGSection(nil, support)];
+    if (support.count) [sections addObject:SGSection(nil, support)];
     SGModRow *mod = pageRow(@"Mod", @"info.circle", ^UIViewController *{ return SGAboutPage(); });
     mod.value = ^NSString *{ return @(SG_VERSION); };
     // The audio effects work on the sound, so both looks have them, with what they are doing beside the chevron.

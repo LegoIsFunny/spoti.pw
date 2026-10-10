@@ -1,6 +1,7 @@
 #import "Core/SGCore.h"
 #import "Settings/SGPageStyle.h"
 #import "About.h"
+#import "App/Donate/Donate.h"
 #import "App/Onboarding/Onboarding.h"
 
 // Every key of the mod's is under one prefix, so a reset is a sweep of the defaults with the stock
@@ -49,6 +50,7 @@ UIViewController *SGAboutPage(void) {
     SGModRow *appIcon = SGAppIconRow();
     if (appIcon) [sections addObject:SGSection(nil, @[withSymbol(appIcon, @"app")])];
     [sections addObjectsFromArray:@[
+        SGSection(nil, @[SGDonateRow()]),
         SGSection(nil, @[
             withSymbol(SGLinkRow(@"Website", nil, SGSiteURL), @"safari"),
             withSymbol(SGLinkRow(@"GitHub", nil, SGRepoURL), @"chevron.left.forwardslash.chevron.right"),

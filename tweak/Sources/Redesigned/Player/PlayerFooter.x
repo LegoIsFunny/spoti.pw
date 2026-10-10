@@ -67,6 +67,24 @@ static CGFloat moveTo(UIView *arranged, UIView *view, CGPoint point, UIView *hos
 
 #pragma mark - lyrics
 
+@interface SGRPlayerLyricsGlyphButton : SGRGlyphButton
+@end
+
+@implementation SGRPlayerLyricsGlyphButton
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
+    CGRect target = self.bounds;
+    target.origin.y -= 8;
+    target.size.height += 16;
+    if (self.effectiveUserInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft) {
+        target.size.width += 8;
+    } else {
+        target.origin.x -= 8;
+        target.size.width += 8;
+    }
+    return CGRectContainsPoint(target, point);
+}
+@end
+
 void SGRPlayerLyricsChanged(void) {
     SGRGlyphButton *glyph = sg_lyricsGlyph;
     if (!glyph) return;
@@ -88,7 +106,7 @@ void SGRPlayerLyricsChanged(void) {
 static SGRGlyphButton *lyricsGlyphIn(UIView *host) {
     SGRGlyphButton *glyph = objc_getAssociatedObject(host, &kLyricsGlyphKey);
     if (!glyph) {
-        glyph = [SGRGlyphButton buttonWithSymbol:kLyricsSymbol pointSize:kLyricsGlyphSize title:@"Lyrics"];
+        glyph = [SGRPlayerLyricsGlyphButton buttonWithSymbol:kLyricsSymbol pointSize:kLyricsGlyphSize title:@"Lyrics"];
         glyph.glyph.tintColor = SGRSecondary();
         glyph.onTap = ^{ SGRPlayerToggleLyrics(); };
         objc_setAssociatedObject(host, &kLyricsGlyphKey, glyph, OBJC_ASSOCIATION_RETAIN_NONATOMIC);

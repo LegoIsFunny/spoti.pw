@@ -32,6 +32,7 @@ static const CGFloat kCreditSize = 12, kCreditAlpha = 0.4, kCreditBottom = 10;
 // The button for the pronunciation and the translation, in the bottom leading corner as Apple Music
 // has it, and the gap between it and the credit beside it.
 static const CGFloat kExtrasSide = 44, kExtrasBottom = 12, kExtrasGlyph = 17, kExtrasCreditGap = 12;
+static const CGFloat kTranslateWidth = 132, kTranslateGap = 16, kTranslateHitSlop = 8;
 static const NSTimeInterval kRestyleFade = 0.3;   // the lines crossfading to a new style
 static const NSTimeInterval kBrowseHold = 3;   // after scrolling by hand, how long until it follows the song again
 static const double kFloatMinMs = 700, kFloatLeadMs = 80;   // a short word still floats up this slowly
@@ -65,6 +66,19 @@ static const double kBreakOut = 0.35, kBreakSwell = 1.2, kBreakSwellShare = 0.35
 static const double kBreakSlack = 0.03;
 // A position that has not moved for this long is a paused player, not two frames between readings.
 static const CFTimeInterval kStillFor = 0.1;
+
+@interface SGRLyricsActionButton : UIButton
+@end
+
+@implementation SGRLyricsActionButton
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
+    CGRect target = CGRectInset(self.bounds, -kTranslateHitSlop, -kTranslateHitSlop);
+    if (!CGRectContainsPoint(target, point)) return NO;
+    SGRKaraokeView *lyrics = (SGRKaraokeView *)self.superview;
+    CGPoint parentPoint = [self convertPoint:point toView:lyrics];
+    return CGRectContainsPoint(UIEdgeInsetsInsetRect(lyrics.bounds, lyrics.lineInsets), parentPoint);
+}
+@end
 
 @interface CAFilter : NSObject
 + (instancetype)filterWithType:(NSString *)type;
@@ -1064,6 +1078,7 @@ typedef struct {
     SGRKaraokeStyle *_style;   // how the lines were laid out
     BOOL _hasSpoken, _hasTranslation;   // whether the song has any line with either
     UIButton *_extras;
+    SGRLyricsActionButton *_translate;
     CGFloat _builtWidth;
     BOOL _showing;
     CAGradientLayer *_fade;
@@ -1138,7 +1153,8 @@ typedef struct {
 
 - (void)tapped:(UITapGestureRecognizer *)tap {
     if (self.takesTap && !self.takesTap()) return;
-    if (_extras && !_extras.hidden && CGRectContainsPoint(_extras.frame, [tap locationInView:self])) return;
+    if (_extras && !_extras.hidden && [(SGRLyricsActionButton *)_extras pointInside:[tap locationInView:_extras] withEvent:nil]) return;
+    if (_translate && !_translate.hidden && [_translate pointInside:[tap locationInView:_translate] withEvent:nil]) return;
     if (_credited.links.count && !_credit.hidden && CGRectContainsPoint(CGRectInset(_credit.frame, -8, -8), [tap locationInView:self])) {
         SGLyricsOpenCredit(_credited);
         return;
@@ -1290,17 +1306,27 @@ typedef struct {
     [super layoutSubviews];
     [self alignFade];
     _scroll.contentSize = self.bounds.size;
+    BOOL translate = _translate && !_translate.hidden;
     BOOL extras = _extras && !_extras.hidden;
-    CGFloat room = MAX(0, self.bounds.size.width - 2 * _margin - (extras ? kExtrasSide + kExtrasCreditGap : 0));
+    CGFloat controlsWidth = (translate ? kTranslateWidth : 0) + (extras ? kExtrasSide + (translate ? kTranslateGap : 0) : 0);
+    CGFloat room = MAX(0, self.bounds.size.width - 2 * _margin - (controlsWidth ? controlsWidth + kExtrasCreditGap : 0));
     CGSize fits = [_credit sizeThatFits:CGSizeMake(room, CGFLOAT_MAX)];
     _credit.bounds = CGRectMake(0, 0, MIN(fits.width, room), fits.height);
     CGFloat bottom = self.bounds.size.height - _band.bottom;
     _credit.frame = CGRectMake(_margin, bottom - _credit.bounds.size.height - kCreditBottom,
                                _credit.bounds.size.width, _credit.bounds.size.height);
-    if (extras) {
-        _extras.frame = CGRectMake(_margin, bottom - kExtrasSide - kExtrasBottom, kExtrasSide, kExtrasSide);
-        _credit.center = CGPointMake(CGRectGetMaxX(_extras.frame) + kExtrasCreditGap + _credit.bounds.size.width / 2, _extras.center.y);
+    CGFloat controlsEnd = _margin;
+    if (translate) {
+        _translate.frame = CGRectMake(_margin, bottom - kExtrasSide - kExtrasBottom, kTranslateWidth, kExtrasSide);
+        controlsEnd = CGRectGetMaxX(_translate.frame);
     }
+    if (extras) {
+        CGFloat x = translate ? controlsEnd + kTranslateGap : _margin;
+        _extras.frame = CGRectMake(x, bottom - kExtrasSide - kExtrasBottom, kExtrasSide, kExtrasSide);
+        controlsEnd = CGRectGetMaxX(_extras.frame);
+    }
+    if (controlsWidth) _credit.center = CGPointMake(controlsEnd + kExtrasCreditGap + _credit.bounds.size.width / 2,
+                                                     bottom - kExtrasSide / 2 - kExtrasBottom);
     if (_lines && self.bounds.size.width != _builtWidth) [self rebuild];
 }
 
@@ -1455,19 +1481,52 @@ typedef struct {
     for (SGRKaraokeLineView *view in _shown.allValues) [view.layer removeAnimationForKey:@"blur"];
 }
 
-// The button shows only for a song with a pronunciation or a translation to show, and its menu only
-// what the song has: a switch for each, reading what tapping it will do.
+// Translation is a direct toggle; the adjacent menu retains the pronunciation control.
 - (void)offerExtras {
-    BOOL offered = _lines && (_hasSpoken || _hasTranslation);
-    if (!offered) {
-        _extras.hidden = YES;
-        return;
-    }
-    if (!_extras) {
+    BOOL offered = _lines != nil;
+    if (!_translate) {
         UIImage *glyph = [UIImage systemImageNamed:@"translate" withConfiguration:
                           [UIImageSymbolConfiguration configurationWithPointSize:kExtrasGlyph weight:UIImageSymbolWeightSemibold]];
-        // The system's glass, which turns solid under Reduce Transparency by itself; before iOS 26, the
-        // Kit's solid fill in its place.
+        UIButtonConfiguration *config;
+        if (@available(iOS 26.0, *)) {
+            config = [UIButtonConfiguration glassButtonConfiguration];
+        } else {
+            config = [UIButtonConfiguration filledButtonConfiguration];
+            config.baseBackgroundColor = SGRSolidGlassFill();
+        }
+        config.image = glyph;
+        config.imagePlacement = UIButtonConfigurationImagePlacementLeading;
+        config.imagePadding = 6;
+        config.contentInsets = NSDirectionalEdgeInsetsMake(4, 10, 4, 10);
+        config.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
+        config.baseForegroundColor = UIColor.whiteColor;
+        _translate = [SGRLyricsActionButton buttonWithConfiguration:config primaryAction:nil];
+        _translate.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+        _translate.accessibilityIdentifier = @"lyrics.translate";
+        [_translate addTarget:self action:@selector(translateTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [self addSubview:_translate];
+    }
+    _translate.hidden = !offered;
+    BOOL translating = SGFlag(SGRKeyLyricsTranslation, NO);
+    NSString *translateTitle = !_hasTranslation ? NSLocalizedString(@"No translation", @"No source-provided lyric translation is available")
+        : translating ? NSLocalizedString(@"Original", @"Show original lyrics instead of their translation")
+                      : NSLocalizedString(@"Translate", @"Show the source-provided lyric translation");
+    UIButtonConfiguration *translateConfig = _translate.configuration;
+    translateConfig.title = translateTitle;
+    _translate.configuration = translateConfig;
+    _translate.enabled = offered && _hasTranslation;
+    _translate.isSelected = translating;
+    _translate.accessibilityLabel = translateTitle;
+    _translate.accessibilityValue = !_hasTranslation ? NSLocalizedString(@"Unavailable", @"No source-provided lyric translation is available")
+        : translating ? NSLocalizedString(@"Shown", @"The source-provided lyric translation is visible")
+                      : NSLocalizedString(@"Hidden", @"The source-provided lyric translation is hidden");
+    _translate.accessibilityHint = !_hasTranslation ? NSLocalizedString(@"This song's lyrics do not include a translation.", @"Unavailable translation hint")
+        : translating ? NSLocalizedString(@"Hides the translation and keeps the original lyrics.", @"Translation toggle hint")
+                      : NSLocalizedString(@"Shows the translation included with these lyrics.", @"Translation toggle hint");
+
+    if (!_extras) {
+        UIImage *glyph = [UIImage systemImageNamed:@"character.phonetic" withConfiguration:
+                          [UIImageSymbolConfiguration configurationWithPointSize:kExtrasGlyph weight:UIImageSymbolWeightSemibold]];
         UIButtonConfiguration *config;
         if (@available(iOS 26.0, *)) {
             config = [UIButtonConfiguration glassButtonConfiguration];
@@ -1478,29 +1537,29 @@ typedef struct {
         config.image = glyph;
         config.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
         config.baseForegroundColor = UIColor.whiteColor;
-        _extras = [UIButton buttonWithConfiguration:config primaryAction:nil];
+        _extras = [SGRLyricsActionButton buttonWithConfiguration:config primaryAction:nil];
         _extras.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
         _extras.showsMenuAsPrimaryAction = YES;
         _extras.preferredMenuElementOrder = UIContextMenuConfigurationElementOrderFixed;
-        _extras.accessibilityLabel = @"Pronunciation and translation";
+        _extras.accessibilityLabel = NSLocalizedString(@"Pronunciation options", @"Lyrics pronunciation menu");
         [self addSubview:_extras];
     }
     NSMutableArray<UIMenuElement *> *items = [NSMutableArray array];
     if (_hasSpoken) {
         BOOL on = SGFlag(SGRKeyLyricsPronunciation, NO);
-        [items addObject:[UIAction actionWithTitle:on ? @"Hide Pronunciation" : @"Show Pronunciation"
+        [items addObject:[UIAction actionWithTitle:on ? NSLocalizedString(@"Hide Pronunciation", @"Hide lyrics pronunciation")
+                                                   : NSLocalizedString(@"Show Pronunciation", @"Show lyrics pronunciation")
                                              image:[UIImage systemImageNamed:@"character.phonetic"] identifier:nil
                                            handler:^(UIAction *action) { SGRSetLyricsTextShown(SGRLyricsTextPronunciation, !on); }]];
     }
-    if (_hasTranslation) {
-        BOOL on = SGFlag(SGRKeyLyricsTranslation, NO);
-        [items addObject:[UIAction actionWithTitle:on ? @"Hide Translation" : @"Show Translation"
-                                             image:[UIImage systemImageNamed:@"character.bubble"] identifier:nil
-                                           handler:^(UIAction *action) { SGRSetLyricsTextShown(SGRLyricsTextTranslation, !on); }]];
-    }
     _extras.menu = [UIMenu menuWithChildren:items];
-    _extras.hidden = NO;
+    _extras.hidden = !offered || !_hasSpoken;
     [self setNeedsLayout];
+}
+
+- (void)translateTapped:(UIButton *)button {
+    if (!_lines || !_hasTranslation) return;
+    SGRSetLyricsTextShown(SGRLyricsTextTranslation, !SGFlag(SGRKeyLyricsTranslation, NO));
 }
 
 // Where a line starts on the page, for the stack as it is arranged now: an open break holds the room

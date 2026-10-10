@@ -91,3 +91,12 @@
 SGModRow *SGRLyricsTextSizesRow(void) {
     return SGPageRow(@"Text sizes", ^UIViewController *{ return [SGRLyricsTextPage new]; });
 }
+
+SGModRow *SGRLyricsUnavailableTranslationRow(void) {
+    SGModRow *row = SGSwitchRow(@"Show Translate when unavailable", @"Keep a dimmed button when these lyrics have no translation", SGRKeyLyricsShowUnavailableTranslate);
+    row.changed = ^(BOOL on) {
+        (void)on;
+        [NSNotificationCenter.defaultCenter postNotificationName:SGRLyricsTextDidChangeNotification object:nil];
+    };
+    return row;
+}

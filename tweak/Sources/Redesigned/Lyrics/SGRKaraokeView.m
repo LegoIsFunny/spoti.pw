@@ -32,7 +32,7 @@ static const CGFloat kCreditSize = 12, kCreditAlpha = 0.4, kCreditBottom = 10;
 // The button for the pronunciation and the translation, in the bottom leading corner as Apple Music
 // has it, and the gap between it and the credit beside it.
 static const CGFloat kExtrasSide = 44, kExtrasBottom = 12, kExtrasGlyph = 17, kExtrasCreditGap = 12;
-static const CGFloat kTranslateWidth = 132, kTranslateGap = 16, kTranslateHitSlop = 8;
+static const CGFloat kTranslateWidth = 44, kTranslateGap = 16, kTranslateHitSlop = 8;
 static const NSTimeInterval kRestyleFade = 0.3;   // the lines crossfading to a new style
 static const NSTimeInterval kBrowseHold = 3;   // after scrolling by hand, how long until it follows the song again
 static const double kFloatMinMs = 700, kFloatLeadMs = 80;   // a short word still floats up this slowly
@@ -1398,6 +1398,7 @@ typedef struct {
     _breakCount = 0;
     _hasSpoken = _hasTranslation = NO;
     _plain = SGKaraokeLinesTiming(_lines) == SGKaraokeTimingNone;
+    // These are the final lines selected for display, with source translations already filtered by target language.
     NSInteger sungTo = 0;   // the top of the song counts as where the singing before the first line ends
     for (NSUInteger i = 0; i < count; i++) {
         SGKaraokeLine *line = _lines[i];
@@ -1506,17 +1507,16 @@ typedef struct {
         [_translate addTarget:self action:@selector(translateTapped:) forControlEvents:UIControlEventTouchUpInside];
         [self addSubview:_translate];
     }
-    _translate.hidden = !offered;
+    BOOL showUnavailable = SGFlag(SGRKeyLyricsShowUnavailableTranslate, YES);
+    _translate.hidden = !offered || (!_hasTranslation && !showUnavailable);
     BOOL translating = SGFlag(SGRKeyLyricsTranslation, NO);
-    NSString *translateTitle = !_hasTranslation ? NSLocalizedString(@"No translation", @"No source-provided lyric translation is available")
-        : translating ? NSLocalizedString(@"Original", @"Show original lyrics instead of their translation")
-                      : NSLocalizedString(@"Translate", @"Show the source-provided lyric translation");
     UIButtonConfiguration *translateConfig = _translate.configuration;
-    translateConfig.title = translateTitle;
+    translateConfig.title = nil;
+    translateConfig.baseForegroundColor = _hasTranslation && translating ? UIColor.whiteColor : SGRSecondary();
     _translate.configuration = translateConfig;
     _translate.enabled = offered && _hasTranslation;
     _translate.selected = translating;
-    _translate.accessibilityLabel = translateTitle;
+    _translate.accessibilityLabel = NSLocalizedString(@"Translate", @"Lyrics translation button");
     _translate.accessibilityValue = !_hasTranslation ? NSLocalizedString(@"Unavailable", @"No source-provided lyric translation is available")
         : translating ? NSLocalizedString(@"Shown", @"The source-provided lyric translation is visible")
                       : NSLocalizedString(@"Hidden", @"The source-provided lyric translation is hidden");

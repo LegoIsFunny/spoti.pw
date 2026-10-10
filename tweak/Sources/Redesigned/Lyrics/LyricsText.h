@@ -13,6 +13,7 @@ typedef NS_ENUM(NSInteger, SGRLyricsText) {
 
 #define SGRKeyLyricsPronunciation @"spotifyglass.redesign.lyricsPronunciation"   // off until switched on
 #define SGRKeyLyricsTranslation @"spotifyglass.redesign.lyricsTranslation"       // off until switched on
+#define SGRKeyLyricsShowUnavailableTranslate @"spotifyglass.redesign.lyricsShowUnavailableTranslate" // on until switched off
 // The three as the words "lyrics", "pronunciation" and "translation", largest first.
 #define SGRKeyLyricsTextOrder @"spotifyglass.redesign.lyricsTextOrder"
 
@@ -28,3 +29,4 @@ void SGRSetLyricsTextShown(SGRLyricsText text, BOOL shown);
 // LyricsTextSettings.m: the Lyrics page's row for the order, which opens a list of the three to drag.
 @class SGModRow;
 SGModRow *SGRLyricsTextSizesRow(void);
+SGModRow *SGRLyricsUnavailableTranslationRow(void);

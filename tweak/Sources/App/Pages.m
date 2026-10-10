@@ -62,14 +62,20 @@ UIViewController *SGNavbarPage(void) {
 // Pronunciation, translation, word sweeping and line meanings exist only in the redesign's lyrics.
 UIViewController *SGLyricsSettingsPage(void) {
     BOOL redesigned = SGRedesignedUIStored();
-    NSMutableArray<SGModRow *> *more = [NSMutableArray arrayWithObject:SGLockScreenLyricsRow()];
-    if (!redesigned) [more insertObject:SGGlassLyricsRow() atIndex:0];
+    NSMutableArray<SGModRow *> *rows = [NSMutableArray array];
+    if (!redesigned) [rows addObject:SGGlassLyricsRow()];
     NSMutableArray<SGModSection *> *sections = [NSMutableArray arrayWithObject:SGLyricsSourcesSection(redesigned)];
     if (redesigned) {
-        [sections addObject:SGSection(@"Display", @[SGLyricsWordTimingRow(), SGRLyricsTextSizesRow(), SGRLyricsUnavailableTranslationRow(),
-                                                      SGLyricsTranslationLanguageRow(), SGLyricsMeaningsRow()])];
+        [rows addObjectsFromArray:@[
+            SGLyricsWordTimingRow(),
+            SGRLyricsTextSizesRow(),
+            SGLyricsTranslationLanguageRow(),
+            SGRLyricsUnavailableTranslationRow(),
+            SGLyricsMeaningsRow(),
+        ]];
     }
-    [sections addObject:SGSection(nil, more)];
+    [rows addObject:SGLockScreenLyricsRow()];
+    [sections addObject:SGSection(nil, rows)];
     return [[SGModPage alloc] initWithTitle:@"Lyrics" intro:SGRestartNote sections:sections footer:nil];
 }
 

@@ -1495,7 +1495,7 @@ typedef struct {
             config.baseBackgroundColor = SGRSolidGlassFill();
         }
         config.image = glyph;
-        config.imagePlacement = UIButtonConfigurationImagePlacementLeading;
+        config.imagePlacement = NSDirectionalRectEdgeLeading;
         config.imagePadding = 6;
         config.contentInsets = NSDirectionalEdgeInsetsMake(4, 10, 4, 10);
         config.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
@@ -1515,7 +1515,7 @@ typedef struct {
     translateConfig.title = translateTitle;
     _translate.configuration = translateConfig;
     _translate.enabled = offered && _hasTranslation;
-    _translate.isSelected = translating;
+    _translate.selected = translating;
     _translate.accessibilityLabel = translateTitle;
     _translate.accessibilityValue = !_hasTranslation ? NSLocalizedString(@"Unavailable", @"No source-provided lyric translation is available")
         : translating ? NSLocalizedString(@"Shown", @"The source-provided lyric translation is visible")

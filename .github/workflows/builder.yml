@@ -57,7 +57,7 @@ jobs:
       - run: make release
 
       - name: Log build number
-        run: echo "Build number: $GITHUB_RUN_NUMBER
+        run: echo "Build number: $GITHUB_RUN_NUMBER"
 
       - uses: actions/upload-artifact@v5
         if: inputs.upload_method != 'filebin'

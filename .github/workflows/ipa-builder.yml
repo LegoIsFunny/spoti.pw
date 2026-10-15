@@ -1,4 +1,4 @@
-name: vitrine drafter
+name: Vitrine Drafter
 
 on:
   workflow_dispatch:
@@ -54,12 +54,7 @@ jobs:
             *) echo "::error::Not an IPA"; exit 1 ;;
           esac
 
-      - name: Build IPA
-        run: make release
-
-      - name: Log build number
-        run: |
-          echo "Build number: $GITHUB_RUN_NUMBER"
+      - run: make release
 
       - uses: actions/upload-artifact@v5
         if: inputs.upload_method != 'filebin'
@@ -90,5 +85,5 @@ jobs:
           gh release create "$TAG" out/*.ipa \
             --draft \
             --target "$GITHUB_SHA" \
-            --title "Build $GITHUB_RUN_NUMBER" \
-            --notes "Automatically built by workflow run $GITHUB_RUN_ID. Build number: $GITHUB_RUN_NUMBER."
+            --title "Build ${{ github.run_number }}" \
+            --notes "Automatically built by workflow run ${{ github.run_id }}."

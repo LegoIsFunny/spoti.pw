@@ -280,9 +280,12 @@ static BOOL requestFromSpotify(NSString *trackID) {
             } else {
                 [sg_asking removeObject:trackID];
                 [sg_losses removeObjectForKey:trackID];
-                // Asked after the chain found plain text only: Spotify's replace it only when they are timed.
+                // Asked after the chain found plain text only: Spotify's replace it only when they are timed,
+                // and never a source picked for the track from the player's ⋯ that answered.
                 NSArray<SGKaraokeLine *> *kept = sg_lyrics[trackID];
-                if (lines && !(kept && SGKaraokeLinesTiming(kept) <= SGKaraokeLinesTiming(lines))) {
+                id answer = SGLyricsKeptAnswer(trackID);
+                BOOL picked = [answer isKindOfClass:SGLyricsResult.class] && [(SGLyricsResult *)answer picked];
+                if (lines && !picked && !(kept && SGKaraokeLinesTiming(kept) <= SGKaraokeLinesTiming(lines))) {
                     keep(trackID, lines);
                     SGLyricsSetCredit(trackID, @"Spotify");
                     return;
@@ -292,6 +295,18 @@ static BOOL requestFromSpotify(NSString *trackID) {
         });
     }] resume];
     return YES;
+}
+
+// Main queue only. The track's lines are forgotten, but for a look still out, and the track playing is asked
+// for again as on a first play.
+void SGKaraokeAskAgain(NSString *trackID) {
+    if (!trackID || [sg_looking containsObject:trackID]) return;
+    [sg_lyrics removeObjectForKey:trackID];
+    [sg_requested removeObject:trackID];
+    [sg_asking removeObject:trackID];
+    [sg_losses removeObjectForKey:trackID];
+    if ([trackID isEqualToString:SGKaraokePlayingTrack()]) SGKaraokeRequestLyrics(trackID);
+    announce(trackID);
 }
 
 void SGKaraokeAskSpotifyForTiming(NSString *trackID) {
@@ -425,10 +440,18 @@ void SGKaraokeSeek(NSInteger ms) {
 }
 
 // A Spotify track by its base62 id, a local file by its URI (Shared/LocalFiles/LocalFiles.h).
+// The id is kept on the track, which the page asks for on every frame; a local file's key is not,
+// as a rename changes it.
+static char sg_trackIDKey;
 static NSString *idOf(SPTPlayerTrack *track) {
+    NSString *kept = track ? objc_getAssociatedObject(track, &sg_trackIDKey) : nil;
+    if (kept) return kept;
     id uri = track.URI;
     NSString *text = [uri isKindOfClass:NSURL.class] ? ((NSURL *)uri).absoluteString : [uri description];
-    return [text hasPrefix:@"spotify:track:"] ? [text substringFromIndex:@"spotify:track:".length] : SGLocalFileLyricsKey(text);
+    if (![text hasPrefix:@"spotify:track:"]) return SGLocalFileLyricsKey(text);
+    NSString *trackID = [text substringFromIndex:@"spotify:track:".length];
+    objc_setAssociatedObject(track, &sg_trackIDKey, trackID, OBJC_ASSOCIATION_RETAIN);
+    return trackID;
 }
 
 // Tracks come in from the player and from every list that reads their metadata, so when the table
@@ -450,10 +473,8 @@ SPTPlayerTrack *SGKaraokeTrackFor(NSString *trackID) {
     @synchronized (sg_seenTracks) { return sg_seenTracks[trackID]; }
 }
 
-void SGKaraokeRememberTrack(SPTPlayerTrack *track) {
-    if (!sg_seenTracks) return;
-    NSString *trackID = idOf(track);
-    if (trackID) remember(track, trackID);
+void SGKaraokeRememberTrack(SPTPlayerTrack *track, NSString *trackID) {
+    if (sg_seenTracks && trackID) remember(track, trackID);
 }
 
 // With a source of the mod's on, the walk for a track starts the moment the player moves to it and,

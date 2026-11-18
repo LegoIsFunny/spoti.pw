@@ -97,10 +97,6 @@ static BOOL isLibraryHeader(UIView *view) {
 // visual effect view. The roots are then taken in their order, not in the order the walk meets them.
 enum { kInNowPlaying = 1, kInLyrics = 2, kInPage = 4 };
 
-// One walk up from the view says which roots it is inside, the way SGIsInside would for each: not past a
-// visual effect view. The roots are then taken in their order, not in the order the walk meets them.
-enum { kInNowPlaying = 1, kInLyrics = 2, kInPage = 4 };
-
 %hook CALayer
 - (void)setBackgroundColor:(CGColorRef)color {
     if (!color) {

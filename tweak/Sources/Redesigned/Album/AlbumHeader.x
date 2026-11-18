@@ -145,6 +145,7 @@ static void watch(UIView *view, const void *key, void (^laidOut)(UIView *view)) 
     NSString *_motionAlbum;
     AVPlayerLayer *_motion;
     AVQueuePlayer *_player;
+    UIScrollView *_list;
     AVPlayerLooper *_looper;
     BOOL _motionOn;   // what the player was last asked, so a scroll's steps ask it nothing again
     BOOL _motionSeen; // whether the hero was on screen when the player was last asked
@@ -192,15 +193,6 @@ static void *kListContext = &kListContext;
     [NSNotificationCenter.defaultCenter removeObserver:self];
     [_list removeObserver:self forKeyPath:@"contentOffset" context:kListContext];
     [self sgr_dropMotion];
-}
-
-- (void)setSquare:(CGRect)square {
-    if (CGRectEqualToRect(_square, square)) return;
-    _square = square;
-    // A path, so the shadow is drawn from it rather than from an offscreen pass over the layer every frame. In the
-    // layer's own coordinates, so it holds wherever -layoutSubviews puts the layer.
-    _shadow.shadowPath = [UIBezierPath bezierPathWithRoundedRect:(CGRect){CGPointZero, square.size} cornerRadius:kSquareRadius].CGPath;
-    [self setNeedsLayout];
 }
 
 - (void)setSquare:(CGRect)square {

@@ -326,7 +326,7 @@ static void applyHeader(UIView *header, BOOL full) {
         objc_setAssociatedObject(container, &kContainerHeightKey, @(rest), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     CGFloat bottom = rest - SGRHeaderInfoBottom - [info contentHeightForWidth:container.bounds.size.width] + SGRHeaderInfoTitleRise;
-    applyHero(container, artwork, bottom);
+    applyHero(container, artwork, bottom, fieldColor);
 }
 
 // What the header shows besides its text: the logo, the buttons, More, and the watch on the buttons' row.
